@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  user-db:
+    image: postgres:16
+    container_name: user-db
+    environment:
+      POSTGRES_DB: user_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: userpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - user_db_data:/var/lib/postgresql/data
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    environment:
+      DB_HOST: user-db
+      DB_PORT: 5432
+      DB_NAME: user_db
+      DB_USER: user
+      DB_PASSWORD: userpass
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-db
+
+volumes:
+  user_db_data:
