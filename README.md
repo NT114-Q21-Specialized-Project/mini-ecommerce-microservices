@@ -20,16 +20,73 @@ Kiến trúc hệ thống tuân theo nguyên tắc:
 - Các service **giao tiếp với nhau thông qua HTTP/REST**
 - Database **không được chia sẻ giữa các service**
 
+```mermaid
+flowchart LR
+    Client[Client / Browser / Curl]
+
+    UserService["User Service (Go)<br/>Port: 8080"]
+    OrderService["Order Service (Spring Boot)<br/>Port: 8081"]
+
+    UserDB[(PostgreSQL<br/>user_db<br/>Port: 5432)]
+    OrderDB[(PostgreSQL<br/>order_db<br/>Port: 5433)]
+
+    Client -->|HTTP| UserService
+    Client -->|HTTP| OrderService
+
+    OrderService -->|HTTP 8080 GET user by id| UserService
+
+    UserService --> UserDB
+    OrderService --> OrderDB
+
 ```
-Client
-  |
-  v
-API Gateway
-  |
-  +--> User Service (Go + PostgreSQL)
-  |
-  +--> Order Service (Spring Boot + PostgreSQL)
+
+### 2.1 Bảng tổng hợp API (API Summary)
+
+#### 🔹 User Service (Port: **8080**)
+
+| Method | Endpoint | Mô tả |
+|------|--------|------|
+| GET | `/health` | Health check service |
+| POST | `/users` | Tạo user mới |
+| GET | `/users` | Lấy danh sách user |
+| GET | `/users/{id}` | Lấy user theo ID |
+
+**Ví dụ gọi API:**
+```bash
+curl http://localhost:8080/users
 ```
+
+---
+
+#### 🔹 Order Service (Port: **8081**)
+
+| Method | Endpoint | Mô tả |
+|------|--------|------|
+| POST | `/orders` | Tạo đơn hàng (validate user qua User Service) |
+
+**Query parameters:**
+
+| Tên | Kiểu | Bắt buộc | Mô tả |
+|---|---|---|---|
+| `userId` | UUID | ✅ | ID của user |
+| `totalAmount` | Double | ✅ | Tổng giá trị đơn hàng |
+
+**Ví dụ gọi API:**
+```bash
+curl -X POST "http://localhost:8081/orders?userId=<USER_UUID>&totalAmount=120.5"
+```
+
+---
+
+### 2.2 Thông tin port & service mapping
+
+| Thành phần | Internal Port | Expose Port |
+|----------|---------------|-------------|
+| User Service | 8080 | 8080 |
+| Order Service | 8080 | 8081 |
+| user-db | 5432 | 5432 |
+| order-db | 5432 | 5433 |
+
 
 ---
 
