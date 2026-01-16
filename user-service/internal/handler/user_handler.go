@@ -6,6 +6,8 @@ import (
 
 	"user-service/internal/model"
 	"user-service/internal/service"
+
+	"github.com/gorilla/mux"
 )
 
 type UserHandler struct {
@@ -42,5 +44,23 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(user)
+}
+
+func (h *UserHandler) GetUserByID(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	user, err := h.service.GetUserByID(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if user == nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
 	json.NewEncoder(w).Encode(user)
 }

@@ -40,3 +40,21 @@ func (r *UserRepository) Create(user *model.User) error {
 		user.Email,
 	).Scan(&user.ID, &user.CreatedAt)
 }
+
+func (r *UserRepository) FindByID(id string) (*model.User, error) {
+	var u model.User
+
+	err := r.db.QueryRow(
+		`SELECT id, name, email, created_at FROM users WHERE id = $1`,
+		id,
+	).Scan(&u.ID, &u.Name, &u.Email, &u.CreatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &u, nil
+}
