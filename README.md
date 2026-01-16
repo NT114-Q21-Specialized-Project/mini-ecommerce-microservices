@@ -26,18 +26,21 @@ flowchart LR
 
     UserService["User Service (Go)<br/>Port: 8080"]
     OrderService["Order Service (Spring Boot)<br/>Port: 8081"]
+    ProductService["Product Service (Spring Boot)<br/>Port: 8082"]
 
     UserDB[(PostgreSQL<br/>user_db<br/>Port: 5432)]
     OrderDB[(PostgreSQL<br/>order_db<br/>Port: 5433)]
+    ProductDB[(PostgreSQL<br/>product_db<br/>Port: 5434)]
 
     Client -->|HTTP| UserService
     Client -->|HTTP| OrderService
+    Client -->|HTTP| ProductService
 
     OrderService -->|HTTP 8080 GET user by id| UserService
 
     UserService --> UserDB
     OrderService --> OrderDB
-
+    ProductService --> ProductDB
 ```
 
 ### 2.1 Bảng tổng hợp API (API Summary)
@@ -78,15 +81,26 @@ curl -X POST "http://localhost:8081/orders?userId=<USER_UUID>&totalAmount=120.5"
 
 ---
 
+#### 🔹 Product Service (Port: **8082**)
+
+| Method | Endpoint | Mô tả |
+|------|--------|------|
+| POST | `/products` | Tạo sản phẩm |
+| GET | `/products` | Lấy danh sách sản phẩm |
+| GET | `/products/{id}` | Lấy sản phẩm theo ID |
+
+---
+
 ### 2.2 Thông tin port & service mapping
 
 | Thành phần | Internal Port | Expose Port |
 |----------|---------------|-------------|
 | User Service | 8080 | 8080 |
 | Order Service | 8080 | 8081 |
+| Product Service | 8080 | 8082 |
 | user-db | 5432 | 5432 |
 | order-db | 5432 | 5433 |
-
+| product-db | 5432 | 5434 |
 
 ---
 
@@ -332,5 +346,54 @@ User not found
 - Không sử dụng foreign key giữa các service
 - Service-to-service giao tiếp qua HTTP
 - Order Service chỉ lưu `userId`, không lưu thông tin user
+
+</details>
+
+
+### 3.3 Product Service
+
+**Product Service** được viết bằng **Spring Boot + JPA**, chịu trách nhiệm quản lý thông tin sản phẩm.
+
+**Công nghệ sử dụng:**
+- Java 17
+- Spring Boot 3
+- Spring Data JPA
+- PostgreSQL
+- Docker & Docker Compose
+
+### 🚀 Chạy Product Service ở môi trường local
+
+<details>
+<summary><strong>Click để xem hướng dẫn chạy local Product Service</strong></summary>
+
+---
+
+```bash
+docker compose up --build product-service
+```
+
+#### Tạo product
+
+```bash
+curl -X POST http://localhost:8082/products \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Macbook Pro",
+    "price": 2500,
+    "stock": 10
+  }'
+```
+
+#### Lấy danh sách product
+
+```bash
+curl http://localhost:8082/products
+```
+
+#### Lấy product theo ID
+
+```bash
+curl http://localhost:8082/products/{productId}
+```
 
 </details>

@@ -54,9 +54,33 @@ services:
       - order-db
       - user-service
 
+  # =========================
+  # PRODUCT SERVICE
+  # =========================
+  product-db:
+    image: postgres:16
+    container_name: product-db
+    environment:
+      POSTGRES_DB: product_db
+      POSTGRES_USER: product
+      POSTGRES_PASSWORD: productpass
+    ports:
+      - "5434:5432"
+    volumes:
+      - product_db_data:/var/lib/postgresql/data
+
+  product-service:
+    build: ./product-service
+    container_name: product-service
+    ports:
+      - "8082:8080"
+    depends_on:
+      - product-db
+
 # =========================
 # VOLUMES
 # =========================
 volumes:
   user_db_data:
   order_db_data:
+  product_db_data:

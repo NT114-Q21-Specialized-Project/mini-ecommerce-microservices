@@ -1,0 +1,12 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://product-db:5432/product_db
+    username: product
+    password: productpass
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
