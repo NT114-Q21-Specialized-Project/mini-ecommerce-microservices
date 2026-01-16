@@ -1,6 +1,9 @@
 version: "3.9"
 
 services:
+  # =========================
+  # USER SERVICE
+  # =========================
   user-db:
     image: postgres:16
     container_name: user-db
@@ -27,5 +30,33 @@ services:
     depends_on:
       - user-db
 
+  # =========================
+  # ORDER SERVICE
+  # =========================
+  order-db:
+    image: postgres:16
+    container_name: order-db
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: order
+      POSTGRES_PASSWORD: orderpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - order_db_data:/var/lib/postgresql/data
+
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    ports:
+      - "8081:8080"
+    depends_on:
+      - order-db
+      - user-service
+
+# =========================
+# VOLUMES
+# =========================
 volumes:
   user_db_data:
+  order_db_data:

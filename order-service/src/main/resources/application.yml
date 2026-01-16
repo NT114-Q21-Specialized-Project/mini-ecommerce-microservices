@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://order-db:5432/order_db
+    username: order
+    password: orderpass
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+server:
+  port: 8080
