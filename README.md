@@ -36,7 +36,8 @@ flowchart LR
     Client -->|HTTP| OrderService
     Client -->|HTTP| ProductService
 
-    OrderService -->|HTTP 8080 GET user by id| UserService
+    OrderService -->|Validate user| UserService
+    OrderService -->|Check & decrease stock| ProductService
 
     UserService --> UserDB
     OrderService --> OrderDB
