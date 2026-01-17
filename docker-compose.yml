@@ -1,8 +1,6 @@
-version: "3.9"
-
 services:
   # =========================
-  # USER SERVICE
+  # USER DATABASE
   # =========================
   user-db:
     image: postgres:16
@@ -15,7 +13,15 @@ services:
       - "5432:5432"
     volumes:
       - user_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  # =========================
+  # USER SERVICE (Go)
+  # =========================
   user-service:
     build: ./user-service
     container_name: user-service
@@ -28,34 +34,12 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - user-db
+      user-db:
+        condition: service_healthy
+    restart: unless-stopped
 
   # =========================
-  # ORDER SERVICE
-  # =========================
-  order-db:
-    image: postgres:16
-    container_name: order-db
-    environment:
-      POSTGRES_DB: order_db
-      POSTGRES_USER: order
-      POSTGRES_PASSWORD: orderpass
-    ports:
-      - "5433:5432"
-    volumes:
-      - order_db_data:/var/lib/postgresql/data
-
-  order-service:
-    build: ./order-service
-    container_name: order-service
-    ports:
-      - "8081:8080"
-    depends_on:
-      - order-db
-      - user-service
-
-  # =========================
-  # PRODUCT SERVICE
+  # PRODUCT DATABASE
   # =========================
   product-db:
     image: postgres:16
@@ -68,19 +52,66 @@ services:
       - "5434:5432"
     volumes:
       - product_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U product"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  # =========================
+  # PRODUCT SERVICE (Spring Boot)
+  # =========================
   product-service:
     build: ./product-service
     container_name: product-service
     ports:
       - "8082:8080"
     depends_on:
-      - product-db
+      product-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # =========================
+  # ORDER DATABASE
+  # =========================
+  order-db:
+    image: postgres:16
+    container_name: order-db
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: order
+      POSTGRES_PASSWORD: orderpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - order_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U order"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =========================
+  # ORDER SERVICE (Spring Boot)
+  # =========================
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    ports:
+      - "8081:8080"
+    depends_on:
+      order-db:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+    restart: unless-stopped
 
 # =========================
 # VOLUMES
 # =========================
 volumes:
   user_db_data:
-  order_db_data:
   product_db_data:
+  order_db_data:

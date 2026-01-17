@@ -16,6 +16,12 @@ public class Order {
     private UUID userId;
 
     @Column(nullable = false)
+    private UUID productId;
+
+    @Column(nullable = false)
+    private Integer quantity;
+
+    @Column(nullable = false)
     private Double totalAmount;
 
     @Column(nullable = false)
@@ -34,6 +40,22 @@ public class Order {
 
     public void setUserId(UUID userId) {
         this.userId = userId;
+    }
+
+    public UUID getProductId() {
+        return productId;
+    }
+
+    public void setProductId(UUID productId) {
+        this.productId = productId;
+    }
+
+    public Integer getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(Integer quantity) {
+        this.quantity = quantity;
     }
 
     public Double getTotalAmount() {

@@ -18,27 +18,67 @@ public class OrderService {
         this.repository = repository;
     }
 
-    public Order createOrder(UUID userId, Double totalAmount) {
+    public Order createOrder(
+            UUID userId,
+            UUID productId,
+            Integer quantity,
+            Double totalAmount
+    ) {
 
-        // 1. Validate user by calling user-service
-        String userServiceUrl = "http://user-service:8080/users/" + userId;
-
+        // 1. Validate user
         try {
-            restTemplate.getForObject(userServiceUrl, String.class);
+            restTemplate.getForObject(
+                    "http://user-service:8080/users/" + userId,
+                    String.class
+            );
         } catch (HttpClientErrorException.NotFound e) {
-            // user-service trả 404
             throw new IllegalArgumentException("User not found");
-        } catch (HttpClientErrorException e) {
-            // các lỗi HTTP khác
-            throw new RuntimeException("Failed to validate user");
         }
 
-        // 2. Create order
+        // 2. Validate product
+        String productUrl = "http://product-service:8080/products/" + productId;
+        ProductResponse product;
+
+        try {
+            product = restTemplate.getForObject(productUrl, ProductResponse.class);
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new IllegalArgumentException("Product not found");
+        }
+
+        // 3. Check stock
+        if (product.getStock() < quantity) {
+            throw new IllegalArgumentException("Not enough stock");
+        }
+
+        // 4. Decrease stock
+        restTemplate.postForObject(
+                "http://product-service:8080/products/" + productId +
+                        "/decrease-stock?quantity=" + quantity,
+                null,
+                Void.class
+        );
+
+        // 5. Save order
         Order order = new Order();
         order.setUserId(userId);
+        order.setProductId(productId);
+        order.setQuantity(quantity);
         order.setTotalAmount(totalAmount);
         order.setStatus("CREATED");
 
         return repository.save(order);
+    }
+
+    // DTO nội bộ để map response product
+    private static class ProductResponse {
+        private Integer stock;
+
+        public Integer getStock() {
+            return stock;
+        }
+
+        public void setStock(Integer stock) {
+            this.stock = stock;
+        }
     }
 }

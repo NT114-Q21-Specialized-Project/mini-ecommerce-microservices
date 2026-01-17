@@ -72,7 +72,13 @@ curl http://localhost:8080/users
 | Tên | Kiểu | Bắt buộc | Mô tả |
 |---|---|---|---|
 | `userId` | UUID | ✅ | ID của user |
+| `productId` | UUID | ✅ | ID của product |
+| `quantity` | Integer | ✅ | Số lượng mua |
 | `totalAmount` | Double | ✅ | Tổng giá trị đơn hàng |
+
+**Error cases:**
+- `User not found`
+- `Not enough stock`
 
 **Ví dụ gọi API:**
 ```bash
@@ -88,6 +94,7 @@ curl -X POST "http://localhost:8081/orders?userId=<USER_UUID>&totalAmount=120.5"
 | POST | `/products` | Tạo sản phẩm |
 | GET | `/products` | Lấy danh sách sản phẩm |
 | GET | `/products/{id}` | Lấy sản phẩm theo ID |
+| POST | `/products/{id}/decrease-stock?quantity={n}` | Giảm tồn kho sản phẩm |
 
 ---
 
@@ -226,6 +233,12 @@ Ví dụ kết quả:
 ]
 ```
 
+#### Lấy user theo ID
+
+```bash
+curl http://localhost:8080/users/{userId}
+```
+
 👉 Nếu các lệnh trên chạy thành công, **User Service đã hoạt động hoàn chỉnh ở môi trường local**.
 
 </details>
@@ -292,7 +305,9 @@ curl http://localhost:8080/users
 
 ---
 
-### Bước 3: Tạo order (user hợp lệ)
+### Bước 3: Tạo order 
+
+##### Tạo order với user hợp lệ
 
 ```bash
 curl -X POST "http://localhost:8081/orders?userId=<USER_UUID>&totalAmount=120.5"
@@ -318,7 +333,7 @@ Kết quả ví dụ:
 
 ---
 
-### Bước 4: Tạo order với user không tồn tại
+#### Tạo order với user không tồn tại
 
 ```bash
 curl -X POST "http://localhost:8081/orders?userId=00000000-0000-0000-0000-000000000000&totalAmount=50"
@@ -329,6 +344,12 @@ Kết quả:
 ```
 HTTP/1.1 400 Bad Request
 User not found
+```
+
+#### Tạo order với số lượng vượt quá tồn kho
+
+```bash
+curl -X POST "http://localhost:8081/orders?userId=<USER_ID>&productId=<PRODUCT_ID>&quantity=9999&totalAmount=999999"
 ```
 
 👉 Điều này chứng minh:
@@ -394,6 +415,12 @@ curl http://localhost:8082/products
 
 ```bash
 curl http://localhost:8082/products/{productId}
+```
+
+#### Giảm tồn kho sản phẩm
+
+```bash
+curl -X POST "http://localhost:8082/products/{productId}/decrease-stock?quantity=2"
 ```
 
 </details>

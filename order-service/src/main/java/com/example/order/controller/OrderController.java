@@ -13,7 +13,7 @@ import java.util.UUID;
 public class OrderController {
 
     private final OrderService service;
-
+    
     public OrderController(OrderService service) {
         this.service = service;
     }
@@ -21,22 +21,28 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<?> createOrder(
             @RequestParam UUID userId,
+            @RequestParam UUID productId,
+            @RequestParam Integer quantity,
             @RequestParam Double totalAmount
     ) {
         try {
-            Order order = service.createOrder(userId, totalAmount);
+            Order order = service.createOrder(
+                    userId,
+                    productId,
+                    quantity,
+                    totalAmount
+            );
+
             return ResponseEntity
                     .status(HttpStatus.CREATED)
                     .body(order);
 
         } catch (IllegalArgumentException e) {
-            // user không tồn tại
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body(e.getMessage());
 
         } catch (Exception e) {
-            // lỗi hệ thống
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Internal server error");
