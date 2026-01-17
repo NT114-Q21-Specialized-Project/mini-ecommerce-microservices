@@ -8,8 +8,9 @@ Hệ thống được xây dựng theo hướng cloud-native, tách biệt từn
 
 Các service chính bao gồm:
 - **User Service**
-- **Order Service** (sẽ phát triển)
-- **API Gateway** (sẽ phát triển)
+- **Order Service**
+- **Product Service**
+- **API Gateway**
 
 ---
 
@@ -22,95 +23,114 @@ Kiến trúc hệ thống tuân theo nguyên tắc:
 
 ```mermaid
 flowchart LR
-    Client[Client / Browser / Curl]
+    %% ===== Client =====
+    Client[Client<br/>Browser / Curl / k6]
 
-    UserService["User Service (Go)<br/>Port: 8080"]
-    OrderService["Order Service (Spring Boot)<br/>Port: 8081"]
-    ProductService["Product Service (Spring Boot)<br/>Port: 8082"]
+    %% ===== API Gateway =====
+    APIGateway["API Gateway<br/>(Spring Cloud Gateway)<br/>Port: 9000"]
 
-    UserDB[(PostgreSQL<br/>user_db<br/>Port: 5432)]
-    OrderDB[(PostgreSQL<br/>order_db<br/>Port: 5433)]
-    ProductDB[(PostgreSQL<br/>product_db<br/>Port: 5434)]
+    %% ===== Services =====
+    UserService["User Service<br/>Go<br/>Port 8080"]
+    ProductService["Product Service<br/>Spring Boot<br/>Port 8082"]
+    OrderService["Order Service<br/>Spring Boot<br/>Port 8081"]
 
-    Client -->|HTTP| UserService
-    Client -->|HTTP| OrderService
-    Client -->|HTTP| ProductService
+    %% ===== Databases =====
+    UserDB[(PostgreSQL<br/>user_db)]
+    ProductDB[(PostgreSQL<br/>product_db)]
+    OrderDB[(PostgreSQL<br/>order_db)]
 
-    OrderService -->|Validate user| UserService
-    OrderService -->|Check & decrease stock| ProductService
+    %% ===== Client Entry =====
+    Client -->|HTTP /api/*| APIGateway
 
+    %% ===== Gateway Routing =====
+    APIGateway -->|/api/users| UserService
+    APIGateway -->|/api/products| ProductService
+    APIGateway -->|/api/orders| OrderService
+
+    %% ===== Service to Service =====
+    OrderService -->|validate user| UserService
+    OrderService -->|decrease stock| ProductService
+    ProductService -->|check user role SELLER| UserService
+
+    %% ===== Database Access =====
     UserService --> UserDB
-    OrderService --> OrderDB
     ProductService --> ProductDB
+    OrderService --> OrderDB
+
 ```
+## 2.1 Bảng tổng hợp API (API Summary)
 
-### 2.1 Bảng tổng hợp API (API Summary)
+Tất cả các request từ **Client** đều được gửi đến **API Gateway** tại cổng **9000**.  
+API Gateway chịu trách nhiệm:
+- Định tuyến (Routing) request đến service tương ứng
+- Loại bỏ tiền tố `/api` trước khi forward vào service nội bộ
+- Đóng vai trò **Entry Point duy nhất** của hệ thống
 
-#### 🔹 User Service (Port: **8080**)
+---
 
-| Method | Endpoint | Mô tả |
-|------|--------|------|
-| GET | `/health` | Health check service |
-| POST | `/users` | Tạo user mới |
-| GET | `/users` | Lấy danh sách user |
-| GET | `/users/{id}` | Lấy user theo ID |
-| GET | `/users/{id}/role` | Lấy role của user (internal API cho service khác) |
+### 🔹 User Service  
+**Gateway Route:** `/api/users/**`  
+**Service nội bộ:** User Service (port **8080**)
 
+| Method | Endpoint (Gateway) | Mô tả |
+|------|--------------------|------|
+| GET | `/api/users/health` | Kiểm tra sức khỏe User Service (Gateway rewrite sang `/health`) |
+| POST | `/api/users` | Tạo người dùng mới (CUSTOMER hoặc SELLER) |
+| GET | `/api/users` | Lấy danh sách toàn bộ người dùng |
+| GET | `/api/users/{id}` | Lấy thông tin chi tiết người dùng theo ID |
+| GET | `/api/users/{id}/role` | Lấy role của người dùng (Internal API cho service khác) |
 
 **Ví dụ gọi API:**
 ```bash
-curl http://localhost:8080/users
+curl -s http://localhost:9000/api/users | jq
 ```
 
 ---
 
-#### 🔹 Order Service (Port: **8081**)
+### 🔹 Product Service  
+**Gateway Route:** `/api/products/**`  
+**Service nội bộ:** Product Service (port **8082**)
 
-| Method | Endpoint | Mô tả |
-|------|--------|------|
-| POST | `/orders` | Tạo đơn hàng (validate user qua User Service) |
-
-**Query parameters:**
-
-| Tên | Kiểu | Bắt buộc | Mô tả |
-|---|---|---|---|
-| `userId` | UUID | ✅ | ID của user |
-| `productId` | UUID | ✅ | ID của product |
-| `quantity` | Integer | ✅ | Số lượng mua |
-| `totalAmount` | Double | ✅ | Tổng giá trị đơn hàng |
-
-**Error cases:**
-- `User not found`
-- `Not enough stock`
+| Method | Endpoint (Gateway) | Mô tả |
+|------|--------------------|------|
+| POST | `/api/products` | Tạo sản phẩm mới (Yêu cầu Header `X-User-Id` của SELLER) |
+| GET | `/api/products` | Lấy danh sách toàn bộ sản phẩm |
+| GET | `/api/products/{id}` | Lấy chi tiết sản phẩm theo ID |
+| POST | `/api/products/{id}/decrease-stock?quantity={n}` | Giảm tồn kho sản phẩm theo số lượng |
 
 **Ví dụ gọi API:**
 ```bash
-curl -X POST "http://localhost:8081/orders?userId=<USER_UUID>&totalAmount=120.5"
+curl -s http://localhost:9000/api/products | jq
 ```
 
 ---
 
-#### 🔹 Product Service (Port: **8082**)
+### 🔹 Order Service  
+**Gateway Route:** `/api/orders/**`  
+**Service nội bộ:** Order Service (port **8081**)
 
-| Method | Endpoint | Mô tả |
-|------|--------|------|
-| POST | `/products` | Tạo sản phẩm |
-| GET | `/products` | Lấy danh sách sản phẩm |
-| GET | `/products/{id}` | Lấy sản phẩm theo ID |
-| POST | `/products/{id}/decrease-stock?quantity={n}` | Giảm tồn kho sản phẩm |
+| Method | Endpoint (Gateway) | Mô tả |
+|------|--------------------|------|
+| POST | `/api/orders` | Tạo đơn hàng mới (Validate User & trừ kho Product) |
 
----
+#### Query parameters bắt buộc cho `POST /api/orders`
 
-### 2.2 Thông tin port & service mapping
+| Tên tham số | Kiểu dữ liệu | Bắt buộc | Mô tả |
+|-----------|-------------|---------|------|
+| userId | UUID | ✅ | ID của người mua |
+| productId | UUID | ✅ | ID của sản phẩm |
+| quantity | Integer | ✅ | Số lượng sản phẩm đặt mua |
+| totalAmount | Double | ✅ | Tổng giá trị đơn hàng |
 
-| Thành phần | Internal Port | Expose Port |
-|----------|---------------|-------------|
-| User Service | 8080 | 8080 |
-| Order Service | 8080 | 8081 |
-| Product Service | 8080 | 8082 |
-| user-db | 5432 | 5432 |
-| order-db | 5432 | 5433 |
-| product-db | 5432 | 5434 |
+#### Error cases
+- User not found
+- Product not found
+- Not enough stock
+
+**Ví dụ gọi API:**
+```bash
+curl -X POST "http://localhost:9000/api/orders?userId=<USER_ID>&productId=<PRODUCT_ID>&quantity=2&totalAmount=120.5"
+```
 
 ---
 
@@ -160,50 +180,7 @@ Role được lưu trực tiếp trong bảng `users` của User Service.
 
 ---
 
-### Bước 1: Chạy PostgreSQL database
-
-```bash
-docker compose up -d user-db
-```
-
-Kiểm tra container đang chạy:
-
-```bash
-docker ps
-```
-
----
-
-### Bước 2: Tạo bảng USERS trong database (chỉ cần chạy 1 lần)
-
-Exec vào container PostgreSQL:
-
-```bash
-docker exec -it user-db psql -U user -d user_db
-```
-
-Trong giao diện `psql`, tạo extension và bảng `users`:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(150) UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-Thoát khỏi `psql`:
-
-```sql
-\q
-```
-
----
-
-### Bước 3: Chạy User Service
+### Bước 1: Chạy User Service
 
 ```bash
 docker compose up --build user-service
@@ -219,12 +196,12 @@ User Service running on :8080
 
 ---
 
-### Bước 4: Test nhanh API (mở terminal mới)
+### Bước 2: Test nhanh API (mở terminal mới)
 
 #### Health check
 
 ```bash
-curl http://localhost:8080/health
+curl -v -s http://localhost:9000/api/users/health
 ```
 
 ---
@@ -232,25 +209,25 @@ curl http://localhost:8080/health
 #### Tạo user mới (CUSTOMER)
 
 ```bash
-curl -X POST http://localhost:8080/users \
+curl -s -X POST http://localhost:9000/api/users \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Tien Phat",
     "email": "tienphat@gmail.com",
     "role": "CUSTOMER"
-  }'
+  }' | jq
 
 ```
 #### Tạo user mới (SELLER)
 
 ```bash
-curl -X POST http://localhost:8080/users \
+curl -s -X POST http://localhost:9000/api/users \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Seller One",
     "email": "seller1@gmail.com",
     "role": "SELLER"
-  }'
+  }' | jq
 
 ```
 ---
@@ -258,7 +235,7 @@ curl -X POST http://localhost:8080/users \
 #### Lấy danh sách user
 
 ```bash
-curl http://localhost:8080/users
+curl -s http://localhost:9000/api/users | jq
 ```
 
 Ví dụ kết quả:
@@ -286,7 +263,7 @@ Ví dụ kết quả:
 #### Lấy user theo ID
 
 ```bash
-curl http://localhost:8080/users/{userId}
+curl -s http://localhost:9000/api/users/{userId} | jq
 ```
 
 #### Lấy role user (Internal API – Service to Service)
@@ -294,7 +271,7 @@ curl http://localhost:8080/users/{userId}
 API này chỉ dùng cho các service nội bộ như Product Service hoặc Order Service.
 
 ```bash
-curl http://localhost:8080/users/{userId}/role
+curl -s http://localhost:9000/api/users/{userId}/role | jq
 ```
 
 Ví dụ kết quả:
@@ -463,25 +440,25 @@ docker compose up --build product-service
 #### Tạo product với SELLER (HỢP LỆ)
 
 ```bash
-curl -X POST http://localhost:8082/products \
+curl -s -X POST http://localhost:9000/api/products \
   -H "Content-Type: application/json" \
   -H "X-User-Id: 62ca9e4e-8c65-4c7e-8348-535ff5e27b76" \
   -d '{
     "name": "Macbook Pro",
     "price": 2500,
     "stock": 5
-  }'
+  }' | jq
 ```
 
 Ví dụ response:
 
 ```json
 {
-  "id": "e747500d-6719-4819-95a2-6016ee931865",
+  "id": "fa740574-e924-4baf-9058-488706ec95a0",
   "name": "Macbook Pro",
   "price": 2500.0,
   "stock": 5,
-  "createdAt": "2026-01-17T05:08:12.580307703Z"
+  "createdAt": "2026-01-17T09:00:33.217502303Z"
 }
 ```
 
@@ -506,9 +483,44 @@ Only SELLER can create product
 #### Lấy danh sách product
 
 ```bash
-curl http://localhost:8082/products
+curl -s http://localhost:9000/api/products | jq
 ```
 
+Ví dụ Response:
+
+```json
+[
+  {
+    "id": "e01fb1e3-8c0b-4ee8-b531-7273e55cdb60",
+    "name": "Macbook Pro",
+    "price": 2500.0,
+    "stock": 8,
+    "createdAt": "2026-01-17T03:21:56.543595Z"
+  },
+  {
+    "id": "e747500d-6719-4819-95a2-6016ee931865",
+    "name": "Macbook Pro",
+    "price": 2500.0,
+    "stock": 3,
+    "createdAt": "2026-01-17T05:08:12.580308Z"
+  },
+  {
+    "id": "2496e6fb-1adf-4f74-9e4c-41d67f2a4aa7",
+    "name": "Macbook Pro M3",
+    "price": 2800.0,
+    "stock": 10,
+    "createdAt": "2026-01-17T08:42:47.024898Z"
+  },
+  {
+    "id": "fa740574-e924-4baf-9058-488706ec95a0",
+    "name": "Macbook Pro",
+    "price": 2500.0,
+    "stock": 5,
+    "createdAt": "2026-01-17T09:00:33.217502Z"
+  }
+]
+
+```
 #### Lấy product theo ID
 
 ```bash
@@ -518,7 +530,7 @@ curl http://localhost:8082/products/{productId}
 #### Giảm tồn kho sản phẩm
 
 ```bash
-curl -X POST "http://localhost:8082/products/{productId}/decrease-stock?quantity=2"
+curl -s -X POST "http://localhost:9000/api/products/{productId}/decrease-stock?quantity=2"
 ```
 
 </details>
@@ -546,18 +558,18 @@ Client
 - Quantity ≤ stock hiện tại
 
 ```bash 
-curl -X POST "http://localhost:8081/orders?userId=edf3ed8d-bfc6-485b-bae3-db00d7fb73c1&productId={productID}&quantity=2&totalAmount=5000"
+curl -s -X POST "http://localhost:9000/api/orders?userId={userID}&productId={productID}&quantity=2&totalAmount=5000" | jq
 ```
 **Ví dụ response:**
 ```json
 {
-  "id": "3039ef0d-2c04-4bf4-a47b-40c149e16033",
+  "id": "ef65b13f-9c75-472e-88db-95c777414c52",
   "userId": "edf3ed8d-bfc6-485b-bae3-db00d7fb73c1",
-  "productId": "e747500d-6719-4819-95a2-6016ee931865",
+  "productId": "2496e6fb-1adf-4f74-9e4c-41d67f2a4aa7",
   "quantity": 2,
   "totalAmount": 5000.0,
   "status": "CREATED",
-  "createdAt": "2026-01-17T05:24:39.948603194Z"
+  "createdAt": "2026-01-17T09:05:17.580037038Z"
 }
 
 ```
@@ -573,19 +585,20 @@ curl http://localhost:8082/products/{productID}
 
 ```json
 {
-  "id": "e747500d-6719-4819-95a2-6016ee931865",
-  "name": "Macbook Pro",
-  "price": 2500.0,
-  "stock": 3,
-  "createdAt": "2026-01-17T05:08:12.580308Z"
+  "id": "2496e6fb-1adf-4f74-9e4c-41d67f2a4aa7",
+  "name": "Macbook Pro M3",
+  "price": 2800.0,
+  "stock": 8,
+  "createdAt": "2026-01-17T08:42:47.024898Z"
 }
+
 ```
 
 #### Các trường hợp lỗi
 
 **Quantity vượt quá tồn kho**
 ```bash
-curl -X POST "http://localhost:8081/orders?userId=<USER_ID>&productId=<PRODUCT_ID>&quantity=9999&totalAmount=999999"
+curl -s -X POST "http://localhost:9000/api/orders?userId=<USER_ID>&productId=<PRODUCT_ID>&quantity=9999&totalAmount=999999"
 ```
 
 **Response:**
@@ -598,7 +611,7 @@ Not enough stock
 **Product không tồn tại**
 
 ```bash
-curl -X POST "http://localhost:8081/orders?userId=<USER_ID>&productId=00000000-0000-0000-0000-000000000000&quantity=1&totalAmount=100"
+curl -s -X POST "http://localhost:9000/api/orders?userId=<USER_ID>&productId=00000000-0000-0000-0000-000000000000&quantity=1&totalAmount=100"
 ```
 
 **Response:**
