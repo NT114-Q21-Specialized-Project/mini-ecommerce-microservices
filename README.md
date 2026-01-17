@@ -54,6 +54,8 @@ flowchart LR
 | POST | `/users` | Tạo user mới |
 | GET | `/users` | Lấy danh sách user |
 | GET | `/users/{id}` | Lấy user theo ID |
+| GET | `/users/{id}/role` | Lấy role của user (internal API cho service khác) |
+
 
 **Ví dụ gọi API:**
 ```bash
@@ -112,6 +114,16 @@ curl -X POST "http://localhost:8081/orders?userId=<USER_UUID>&totalAmount=120.5"
 
 ---
 
+### 2.3 HTTP Status Codes
+
+| Status | Ý nghĩa |
+|------|--------|
+| 201 | Tạo resource thành công |
+| 400 | Input không hợp lệ |
+| 403 | Không đủ quyền |
+| 404 | Resource không tồn tại |
+| 502 | Service phụ thuộc không khả dụng |
+
 ## 3. Chi tiết ứng dụng
 
 ### 3.1 User Service
@@ -123,6 +135,21 @@ curl -X POST "http://localhost:8081/orders?userId=<USER_UUID>&totalAmount=120.5"
 - PostgreSQL
 - Docker & Docker Compose
 - RESTful API
+
+---
+
+### 🔐 User Role & Authorization
+
+User Service chịu trách nhiệm **quản lý role người dùng** trong toàn hệ thống, phục vụ cho các service khác (Product / Order) kiểm tra quyền hạn.
+
+#### Các role hiện tại
+
+| Role | Mô tả |
+|------|------|
+| CUSTOMER | Người mua hàng |
+| SELLER | Người bán, được phép tạo sản phẩm |
+
+Role được lưu trực tiếp trong bảng `users` của User Service.
 
 ---
 
@@ -202,17 +229,30 @@ curl http://localhost:8080/health
 
 ---
 
-#### Tạo user mới
+#### Tạo user mới (CUSTOMER)
 
 ```bash
 curl -X POST http://localhost:8080/users \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Tien Phat",
-    "email": "tienphat@gmail.com"
+    "email": "tienphat@gmail.com",
+    "role": "CUSTOMER"
   }'
-```
 
+```
+#### Tạo user mới (SELLER)
+
+```bash
+curl -X POST http://localhost:8080/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Seller One",
+    "email": "seller1@gmail.com",
+    "role": "SELLER"
+  }'
+
+```
 ---
 
 #### Lấy danh sách user
@@ -226,18 +266,44 @@ Ví dụ kết quả:
 ```json
 [
   {
-    "id": "f5caf3b2-832b-4470-917b-eebdf4b34e76",
+    "id": "edf3ed8d-bfc6-485b-bae3-db00d7fb73c1",
     "name": "Tien Phat",
     "email": "tienphat@gmail.com",
-    "created_at": "2026-01-16T03:13:05.152545Z"
+    "role": "CUSTOMER",
+    "created_at": "2026-01-17T03:21:16.576701Z"
+  },
+  {
+    "id": "62ca9e4e-8c65-4c7e-8348-535ff5e27b76",
+    "name": "Seller One",
+    "email": "seller1@gmail.com",
+    "role": "SELLER",
+    "created_at": "2026-01-17T04:45:35.827152Z"
   }
 ]
+
 ```
 
 #### Lấy user theo ID
 
 ```bash
 curl http://localhost:8080/users/{userId}
+```
+
+#### Lấy role user (Internal API – Service to Service)
+
+API này chỉ dùng cho các service nội bộ như Product Service hoặc Order Service.
+
+```bash
+curl http://localhost:8080/users/{userId}/role
+```
+
+Ví dụ kết quả:
+
+```json
+{
+  "id": "62ca9e4e-8c65-4c7e-8348-535ff5e27b76",
+  "role": "SELLER"
+}
 ```
 
 👉 Nếu các lệnh trên chạy thành công, **User Service đã hoạt động hoàn chỉnh ở môi trường local**.
@@ -394,16 +460,47 @@ curl -X POST "http://localhost:8081/orders?userId=<USER_ID>&productId=<PRODUCT_I
 docker compose up --build product-service
 ```
 
-#### Tạo product
+#### Tạo product với SELLER (HỢP LỆ)
 
 ```bash
 curl -X POST http://localhost:8082/products \
   -H "Content-Type: application/json" \
+  -H "X-User-Id: 62ca9e4e-8c65-4c7e-8348-535ff5e27b76" \
   -d '{
     "name": "Macbook Pro",
     "price": 2500,
+    "stock": 5
+  }'
+```
+
+Ví dụ response:
+
+```json
+{
+  "id": "e747500d-6719-4819-95a2-6016ee931865",
+  "name": "Macbook Pro",
+  "price": 2500.0,
+  "stock": 5,
+  "createdAt": "2026-01-17T05:08:12.580307703Z"
+}
+```
+
+#### Tạo product với CUSTOMER (BỊ TỪ CHỐI)
+
+```bash
+curl -X POST http://localhost:8082/products \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: edf3ed8d-bfc6-485b-bae3-db00d7fb73c1" \
+  -d '{
+    "name": "iPhone 15",
+    "price": 1200,
     "stock": 10
   }'
+```
+
+Response:
+```json
+Only SELLER can create product
 ```
 
 #### Lấy danh sách product
@@ -425,3 +522,88 @@ curl -X POST "http://localhost:8082/products/{productId}/decrease-stock?quantity
 ```
 
 </details>
+
+### 3.4 ORDER ↔ PRODUCT INTEGRATION
+#### 📦 Order tạo đơn & tự động trừ tồn kho sản phẩm
+
+Khi tạo đơn hàng thành công, Order Service sẽ gọi sang Product Service để:
+- Kiểm tra tồn kho
+- Giảm số lượng sản phẩm tương ứng
+
+**Luồng xử lý:**
+```bash
+Client
+  → Order Service
+      → Validate User (User Service)
+      → Check & Decrease Stock (Product Service)
+      → Save Order
+```
+
+**Tạo order hợp lệ (Customer mua hàng)**
+Điều kiện:
+- User tồn tại
+- Product tồn tại
+- Quantity ≤ stock hiện tại
+
+```bash 
+curl -X POST "http://localhost:8081/orders?userId=edf3ed8d-bfc6-485b-bae3-db00d7fb73c1&productId={productID}&quantity=2&totalAmount=5000"
+```
+**Ví dụ response:**
+```json
+{
+  "id": "3039ef0d-2c04-4bf4-a47b-40c149e16033",
+  "userId": "edf3ed8d-bfc6-485b-bae3-db00d7fb73c1",
+  "productId": "e747500d-6719-4819-95a2-6016ee931865",
+  "quantity": 2,
+  "totalAmount": 5000.0,
+  "status": "CREATED",
+  "createdAt": "2026-01-17T05:24:39.948603194Z"
+}
+
+```
+
+**🔍 Kiểm tra tồn kho sau khi tạo order**
+
+Sau khi order được tạo thành công, tồn kho của sản phẩm sẽ giảm tương ứng.
+
+```bash
+curl http://localhost:8082/products/{productID}
+```
+**Ví dụ kết quả:**
+
+```json
+{
+  "id": "e747500d-6719-4819-95a2-6016ee931865",
+  "name": "Macbook Pro",
+  "price": 2500.0,
+  "stock": 3,
+  "createdAt": "2026-01-17T05:08:12.580308Z"
+}
+```
+
+#### Các trường hợp lỗi
+
+**Quantity vượt quá tồn kho**
+```bash
+curl -X POST "http://localhost:8081/orders?userId=<USER_ID>&productId=<PRODUCT_ID>&quantity=9999&totalAmount=999999"
+```
+
+**Response:**
+
+```matheamtica
+400 Bad Request
+Not enough stock
+```
+
+**Product không tồn tại**
+
+```bash
+curl -X POST "http://localhost:8081/orders?userId=<USER_ID>&productId=00000000-0000-0000-0000-000000000000&quantity=1&totalAmount=100"
+```
+
+**Response:**
+
+```matheamtica
+400 Bad Request
+Product not found
+```
