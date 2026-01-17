@@ -46,10 +46,15 @@ func main() {
 	// ROUTES
 	// =========================
 	r := mux.NewRouter()
+
 	r.HandleFunc("/health", h.Health).Methods("GET")
+
 	r.HandleFunc("/users", h.GetUsers).Methods("GET")
 	r.HandleFunc("/users", h.CreateUser).Methods("POST")
 	r.HandleFunc("/users/{id}", h.GetUserByID).Methods("GET")
+
+	//ROLE API (FIXED)
+	r.HandleFunc("/users/{id}/role", h.GetUserRole).Methods("GET")
 
 	log.Println("User Service running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))

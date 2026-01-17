@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+
 	"user-service/internal/model"
 	"user-service/internal/repository"
 )
@@ -18,9 +20,31 @@ func (s *UserService) GetUsers() ([]model.User, error) {
 }
 
 func (s *UserService) CreateUser(user *model.User) error {
+
+	if user.Role == "" {
+		user.Role = "CUSTOMER"
+	}
+
+	if !isValidRole(user.Role) {
+		return errors.New("invalid role")
+	}
+
 	return s.repo.Create(user)
 }
 
 func (s *UserService) GetUserByID(id string) (*model.User, error) {
 	return s.repo.FindByID(id)
+}
+
+func (s *UserService) GetUserRole(id string) (string, error) {
+	return s.repo.FindRoleByID(id)
+}
+
+func isValidRole(role string) bool {
+	switch role {
+	case "CUSTOMER", "SELLER", "ADMIN":
+		return true
+	default:
+		return false
+	}
 }

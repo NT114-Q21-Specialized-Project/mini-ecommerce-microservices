@@ -1,9 +1,13 @@
 package com.example.product.service;
 
+import com.example.product.dto.UserRoleResponse;
 import com.example.product.model.Product;
 import com.example.product.repository.ProductRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.UUID;
@@ -12,15 +16,24 @@ import java.util.UUID;
 public class ProductService {
 
     private final ProductRepository repository;
+    private final RestTemplate restTemplate;
 
-    public ProductService(ProductRepository repository) {
+    public ProductService(ProductRepository repository, RestTemplate restTemplate) {
         this.repository = repository;
+        this.restTemplate = restTemplate;
     }
 
-    public Product create(Product product) {
+    // =========================
+    // CREATE PRODUCT (SELLER ONLY)
+    // =========================
+    public Product create(Product product, UUID userId) {
+        validateSeller(userId);
         return repository.save(product);
     }
 
+    // =========================
+    // QUERY
+    // =========================
     public List<Product> findAll() {
         return repository.findAll();
     }
@@ -30,14 +43,42 @@ public class ProductService {
                 .orElseThrow(() -> new RuntimeException("Product not found"));
     }
 
-    // Check & decrease stock
+    // =========================
+    // STOCK MANAGEMENT
+    // =========================
     @Transactional
     public void checkAndDecreaseStock(UUID productId, int quantity) {
-
         int updatedRows = repository.decreaseStock(productId, quantity);
-
         if (updatedRows == 0) {
             throw new IllegalArgumentException("Product not found or insufficient stock");
+        }
+    }
+
+    // =========================
+    // INTERNAL: CHECK SELLER ROLE
+    // =========================
+    private void validateSeller(UUID userId) {
+
+        String url = "http://user-service:8080/users/" + userId + "/role";
+
+        UserRoleResponse response;
+
+        try {
+            response = restTemplate.getForObject(url, UserRoleResponse.class);
+
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new IllegalArgumentException("User not found");
+
+        } catch (ResourceAccessException e) {
+            throw new IllegalStateException("User service unavailable");
+        }
+
+        if (response == null || response.getRole() == null) {
+            throw new IllegalStateException("Invalid response from user-service");
+        }
+
+        if (!"SELLER".equals(response.getRole())) {
+            throw new IllegalArgumentException("Only SELLER can create product");
         }
     }
 }
