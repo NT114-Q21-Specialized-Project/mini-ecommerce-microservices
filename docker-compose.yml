@@ -33,8 +33,13 @@ services:
       DB_NAME: user_db
       DB_USER: user
       DB_PASSWORD: userpass
+
+      # ===== OpenTelemetry =====
+      OTEL_SERVICE_NAME: user-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
     ports:
-      - "8080:8080"   # ⚠️ giữ tạm để debug
+      - "8080:8080"
     depends_on:
       user-db:
         condition: service_healthy
@@ -66,8 +71,12 @@ services:
   product-service:
     build: ./product-service
     container_name: product-service
+    environment:
+      OTEL_SERVICE_NAME: product-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
     ports:
-      - "8082:8080"   # ⚠️ giữ tạm để debug
+      - "8082:8080"
     depends_on:
       product-db:
         condition: service_healthy
@@ -99,8 +108,12 @@ services:
   order-service:
     build: ./order-service
     container_name: order-service
+    environment:
+      OTEL_SERVICE_NAME: order-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
     ports:
-      - "8081:8080"   # ⚠️ giữ tạm để debug
+      - "8081:8080"
     depends_on:
       order-db:
         condition: service_healthy
@@ -111,18 +124,64 @@ services:
     restart: unless-stopped
 
   # =========================
-  # API GATEWAY (Spring Cloud Gateway)
+  # API GATEWAY
   # =========================
   api-gateway:
     build: ./api-gateway
     container_name: api-gateway
+    environment:
+      OTEL_SERVICE_NAME: api-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
     ports:
-      - "9000:8080"   # 🌐 CLIENT CHỈ GỌI CỔNG NÀY
+      - "9000:8080"
     depends_on:
       - user-service
       - product-service
       - order-service
     restart: unless-stopped
+
+  # =========================
+  # TEMPO
+  # =========================
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: tempo
+    command: ["-config.file=/etc/tempo.yml"]
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo.yml
+    ports:
+      - "3200:3200"   # HTTP API
+      - "9095:9095"   # gRPC query
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  # =========================
+  # GRAFANA
+  # =========================
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - tempo
+    volumes:
+      - grafana_data:/var/lib/grafana
+  
+  prometheus:
+    image: prom/prometheus:v2.49.1
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+
 
 # =========================
 # VOLUMES
@@ -131,3 +190,4 @@ volumes:
   user_db_data:
   product_db_data:
   order_db_data:
+  grafana_data:

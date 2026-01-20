@@ -1,61 +1,103 @@
 package main
 
 import (
-	"log"
-	"net/http"
-	"time"
+        "context"
+        "log"
+        "net/http"
+        "time"
 
-	"github.com/gorilla/mux"
+        "github.com/gorilla/mux"
 
-	"user-service/internal/config"
-	"user-service/internal/handler"
-	"user-service/internal/repository"
-	"user-service/internal/service"
+        "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+        "go.opentelemetry.io/otel"
+        "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+        "go.opentelemetry.io/otel/sdk/resource"
+        sdktrace "go.opentelemetry.io/otel/sdk/trace"
+        semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+
+        "user-service/internal/config"
+        "user-service/internal/handler"
+        "user-service/internal/repository"
+        "user-service/internal/service"
 )
 
+func initTracer() func() {
+        ctx := context.Background()
+
+        exporter, err := otlptracegrpc.New(ctx,
+                otlptracegrpc.WithEndpoint("tempo:4317"),
+                otlptracegrpc.WithInsecure(),
+        )
+        if err != nil {
+                log.Fatalf("failed to init tracer: %v", err)
+        }
+
+        res := resource.NewWithAttributes(
+                semconv.SchemaURL,
+                semconv.ServiceName("user-service"),
+        )
+
+        tp := sdktrace.NewTracerProvider(
+                sdktrace.WithBatcher(exporter),
+                sdktrace.WithResource(res),
+        )
+
+        otel.SetTracerProvider(tp)
+
+        return func() {
+                _ = tp.Shutdown(ctx)
+        }
+}
+
 func main() {
-	var cfg *config.Config
-	var err error
+        shutdown := initTracer()
+        defer shutdown()
 
-	// =========================
-	// WAIT FOR DB (RETRY)
-	// =========================
-	for i := 1; i <= 10; i++ {
-		cfg, err = config.LoadConfig()
-		if err == nil {
-			log.Println("Connected to database")
-			break
-		}
+        var cfg *config.Config
+        var err error
 
-		log.Printf("Database not ready (attempt %d/10): %v\n", i, err)
-		time.Sleep(2 * time.Second)
-	}
+        // =========================
+        // WAIT FOR DB (RETRY)
+        // =========================
+        for i := 1; i <= 10; i++ {
+                cfg, err = config.LoadConfig()
+                if err == nil {
+                        log.Println("Connected to database")
+                        break
+                }
 
-	if err != nil {
-		log.Fatalf("Cannot connect to database after retries: %v", err)
-	}
+                log.Printf("Database not ready (attempt %d/10): %v\n", i, err)
+                time.Sleep(2 * time.Second)
+        }
 
-	// =========================
-	// INIT DEPENDENCIES
-	// =========================
-	repo := repository.NewUserRepository(cfg.DB)
-	svc := service.NewUserService(repo)
-	h := handler.NewUserHandler(svc)
+        if err != nil {
+                log.Fatalf("Cannot connect to database after retries: %v", err)
+        }
 
-	// =========================
-	// ROUTES
-	// =========================
-	r := mux.NewRouter()
+        // =========================
+        // INIT DEPENDENCIES
+        // =========================
+        repo := repository.NewUserRepository(cfg.DB)
+        svc := service.NewUserService(repo)
+        h := handler.NewUserHandler(svc)
 
-	r.HandleFunc("/health", h.Health).Methods("GET")
+        // =========================
+        // ROUTES
+        // =========================
+        r := mux.NewRouter()
 
-	r.HandleFunc("/users", h.GetUsers).Methods("GET")
-	r.HandleFunc("/users", h.CreateUser).Methods("POST")
-	r.HandleFunc("/users/{id}", h.GetUserByID).Methods("GET")
+        r.HandleFunc("/health", h.Health).Methods("GET")
 
-	//ROLE API (FIXED)
-	r.HandleFunc("/users/{id}/role", h.GetUserRole).Methods("GET")
+        r.HandleFunc("/users", h.GetUsers).Methods("GET")
+        r.HandleFunc("/users", h.CreateUser).Methods("POST")
+        r.HandleFunc("/users/{id}", h.GetUserByID).Methods("GET")
 
-	log.Println("User Service running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+        //ROLE API (FIXED)
+        r.HandleFunc("/users/{id}/role", h.GetUserRole).Methods("GET")
+
+        log.Println("User Service running on :8080")
+        log.Fatal(http.ListenAndServe(
+                ":8080",
+                otelhttp.NewHandler(r, "user-service"),
+        ))
 }

@@ -8,5 +8,16 @@ spring:
       ddl-auto: update
     show-sql: true
     open-in-view: false
+
 server:
   port: 8080
+
+management:
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+
+  otlp:
+    tracing:
+      endpoint: http://tempo:4317
