@@ -142,6 +142,18 @@ services:
     restart: unless-stopped
 
   # =========================
+  # FRONT-END (React)
+  # =========================
+  front-end:
+    build: ./front-end
+    container_name: front-end
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  # =========================
   # TEMPO
   # =========================
   tempo:
