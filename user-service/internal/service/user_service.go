@@ -40,9 +40,30 @@ func (s *UserService) GetUserRole(id string) (string, error) {
 	return s.repo.FindRoleByID(id)
 }
 
+// =========================
+// UPDATE USER
+// =========================
+func (s *UserService) UpdateUser(id, name, email string) error {
+	return s.repo.Update(id, name, email)
+}
+
+// =========================
+// DELETE USER
+// =========================
+func (s *UserService) DeleteUser(id string) error {
+	return s.repo.SoftDelete(id)
+}
+
+// =========================
+// USER EXISTS
+// =========================
+func (s *UserService) UserExists(id string) (bool, error) {
+	return s.repo.Exists(id)
+}
+
 func isValidRole(role string) bool {
 	switch role {
-	case "CUSTOMER", "SELLER", "ADMIN":
+	case "CUSTOMER", "SELLER":
 		return true
 	default:
 		return false

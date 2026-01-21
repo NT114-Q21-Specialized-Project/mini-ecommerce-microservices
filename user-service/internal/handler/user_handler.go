@@ -47,7 +47,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var user model.User
 
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -84,7 +84,6 @@ func (h *UserHandler) GetUserByID(w http.ResponseWriter, r *http.Request) {
 
 // =========================
 // INTERNAL API – GET USER ROLE
-// DÙNG CHO PRODUCT / ORDER SERVICE
 // =========================
 func (h *UserHandler) GetUserRole(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
@@ -101,9 +100,80 @@ func (h *UserHandler) GetUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-
 	json.NewEncoder(w).Encode(map[string]string{
 		"id":   id,
 		"role": role,
+	})
+}
+
+// =========================
+// UPDATE USER (PARTIAL UPDATE)
+// =========================
+func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	var payload struct {
+		Name  *string `json:"name"`
+		Email *string `json:"email"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Không có field nào để update
+	if payload.Name == nil && payload.Email == nil {
+		http.Error(w, "Nothing to update", http.StatusBadRequest)
+		return
+	}
+
+	nameVal := ""
+	if payload.Name != nil {
+		nameVal = *payload.Name
+	}
+
+	emailVal := ""
+	if payload.Email != nil {
+		emailVal = *payload.Email
+	}
+
+	if err := h.service.UpdateUser(id, nameVal, emailVal); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// =========================
+// DELETE USER (SOFT DELETE)
+// =========================
+func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	if err := h.service.DeleteUser(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// =========================
+// INTERNAL API – USER EXISTS
+// =========================
+func (h *UserHandler) UserExists(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	exists, err := h.service.UserExists(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{
+		"exists": exists,
 	})
 }
