@@ -1,0 +1,7 @@
+.git
+target
+node_modules
+*.log
+.idea
+.vscode
+README.md

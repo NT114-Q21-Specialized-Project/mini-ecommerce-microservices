@@ -57,6 +57,7 @@ user-service/go.work.sum
 .stylelintcache
 .vite/
 .parcel-cache
+front-end/README.md
 
 # =======================
 # OS / Editor

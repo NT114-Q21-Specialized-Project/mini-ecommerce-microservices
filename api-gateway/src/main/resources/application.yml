@@ -7,23 +7,6 @@ spring:
 
   cloud:
     gateway:
-      # ======================
-      # CẤU HÌNH CORS (Bổ sung để Frontend gọi API)
-      # ======================
-      globalcors:
-        add-to-id-uri-mappings: true
-        cors-configurations:
-          '[/**]':
-            allowedOrigins: "http://localhost:5173" # URL mặc định của Vite
-            allowedMethods:
-              - GET
-              - POST
-              - PUT
-              - DELETE
-              - OPTIONS
-            allowedHeaders: "*"
-            maxAge: 3600
-
       default-filters:
         - AddRequestHeader=X-Gateway, api-gateway
         - AddResponseHeader=X-Powered-By, Spring-Cloud-Gateway
