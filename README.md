@@ -74,11 +74,14 @@ API Gateway chịu trách nhiệm:
 
 | Method | Endpoint (Gateway) | Mô tả |
 |------|--------------------|------|
-| GET | `/api/users/health` | Kiểm tra sức khỏe User Service (Gateway rewrite sang `/health`) |
-| POST | `/api/users` | Tạo người dùng mới (CUSTOMER hoặc SELLER) |
-| GET | `/api/users` | Lấy danh sách toàn bộ người dùng |
-| GET | `/api/users/{id}` | Lấy thông tin chi tiết người dùng theo ID |
-| GET | `/api/users/{id}/role` | Lấy role của người dùng (Internal API cho service khác) |
+| GET | `/api/users/health` | Health check User Service (Gateway rewrite sang `/health`) |
+| POST | `/api/users` | Tạo người dùng mới (`CUSTOMER` hoặc `SELLER`) |
+| GET | `/api/users` | Lấy danh sách toàn bộ user (chỉ user đang active) |
+| GET | `/api/users/{id}` | Lấy thông tin chi tiết user theo ID |
+| PUT | `/api/users/{id}` | Cập nhật thông tin user (partial update: name, email) |
+| DELETE | `/api/users/{id}` | Xóa user (soft delete – set `is_active = false`) |
+| GET | `/api/users/{id}/exists` | Kiểm tra user có tồn tại và đang active hay không (Internal API) |
+| GET | `/api/users/{id}/role` | Lấy role của user (Internal API cho Product / Order Service) |
 
 **Ví dụ gọi API:**
 ```bash
@@ -198,7 +201,7 @@ User Service running on :8080
 
 ### Bước 2: Test nhanh API (mở terminal mới)
 
-#### Health check
+#### 1. Health check & Trạng thái hệ thống
 
 ```bash
 curl -v -s http://localhost:9000/api/users/health
@@ -206,7 +209,9 @@ curl -v -s http://localhost:9000/api/users/health
 
 ---
 
-#### Tạo user mới (CUSTOMER)
+#### 2. Quản lý người dùng (CRUD Operations)
+
+##### Tạo user mới (CUSTOMER)
 
 ```bash
 curl -s -X POST http://localhost:9000/api/users \
@@ -218,7 +223,7 @@ curl -s -X POST http://localhost:9000/api/users \
   }' | jq
 
 ```
-#### Tạo user mới (SELLER)
+##### Tạo user mới (SELLER)
 
 ```bash
 curl -s -X POST http://localhost:9000/api/users \
@@ -230,9 +235,33 @@ curl -s -X POST http://localhost:9000/api/users \
   }' | jq
 
 ```
+
+##### Cập nhật thông tin User (Partial Update) 
+
+Dùng để thay đổi tên hoặc email của một user hiện có (thay {userId} bằng ID thực tế).
+
+```bash
+curl -v -X PUT http://localhost:9000/api/users/{userId} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Tien Phat Updated",
+    "email": "tienphat.new@gmail.com"
+  }'
+
+```
+##### Xóa user (Soft Delete) 
+
+Chuyển trạng thái `is_active` về  `false`, user sẽ không xuất hiện trong các danh sách công khai.
+
+```bash
+curl -v -X DELETE http://localhost:9000/api/users/{userId}
+```
+
 ---
 
-#### Lấy danh sách user
+#### 3. Truy vấn dữ liệu (Query)
+
+##### Lấy danh sách user
 
 ```bash
 curl -s http://localhost:9000/api/users | jq
@@ -260,13 +289,23 @@ Ví dụ kết quả:
 
 ```
 
-#### Lấy user theo ID
+##### Lấy chi tiết user theo ID
 
 ```bash
 curl -s http://localhost:9000/api/users/{userId} | jq
 ```
 
-#### Lấy role user (Internal API – Service to Service)
+##### Kiểm tra User có tồn tại và đang active không
+
+```bash
+curl -s http://localhost:9000/api/users/{userId}/exists | jq
+```
+
+Kết quả trả về: `{"exists": true}` hoặc `{"exists": false}`
+
+#### 4. API Nội bộ (Internal API – Service to Service)
+ 
+##### Lấy role user
 
 API này chỉ dùng cho các service nội bộ như Product Service hoặc Order Service.
 
