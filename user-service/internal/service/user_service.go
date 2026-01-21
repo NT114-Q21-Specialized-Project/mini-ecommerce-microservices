@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"golang.org/x/crypto/bcrypt"
 
 	"user-service/internal/model"
 	"user-service/internal/repository"
@@ -19,6 +20,9 @@ func (s *UserService) GetUsers() ([]model.User, error) {
 	return s.repo.FindAll()
 }
 
+// =========================
+// REGISTER / CREATE USER (UPDATED WITH HASHING)
+// =========================
 func (s *UserService) CreateUser(user *model.User) error {
 
 	if user.Role == "" {
@@ -29,7 +33,32 @@ func (s *UserService) CreateUser(user *model.User) error {
 		return errors.New("invalid role")
 	}
 
+	// Mã hóa mật khẩu
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	user.Password = string(hashedPassword)
+
 	return s.repo.Create(user)
+}
+
+// =========================
+// LOGIN LOGIC
+// =========================
+func (s *UserService) Login(email, password string) (*model.User, error) {
+	user, err := s.repo.FindByEmail(email)
+	if err != nil || user == nil {
+		return nil, errors.New("invalid email or password")
+	}
+
+	// So sánh mật khẩu hash
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
+		return nil, errors.New("invalid email or password")
+	}
+
+	return user, nil
 }
 
 func (s *UserService) GetUserByID(id string) (*model.User, error) {
@@ -63,7 +92,7 @@ func (s *UserService) UserExists(id string) (bool, error) {
 
 func isValidRole(role string) bool {
 	switch role {
-	case "CUSTOMER", "SELLER":
+	case "CUSTOMER", "SELLER", "ADMIN":
 		return true
 	default:
 		return false

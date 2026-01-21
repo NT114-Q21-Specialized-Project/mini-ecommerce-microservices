@@ -88,8 +88,12 @@ func main() {
 
 	r.HandleFunc("/health", h.Health).Methods("GET")
 
+	// AUTH & REGISTER ROUTES (ADDED)
+	r.HandleFunc("/users/login", h.Login).Methods("POST")
+	r.HandleFunc("/users/register", h.CreateUser).Methods("POST")
+
 	r.HandleFunc("/users", h.GetUsers).Methods("GET")
-	r.HandleFunc("/users", h.CreateUser).Methods("POST")
+	r.HandleFunc("/users", h.CreateUser).Methods("POST") // Vẫn giữ cho Admin tạo hộ
 	
 	// USER BY ID ROUTES (UPDATED)
 	r.HandleFunc("/users/{id}", h.GetUserByID).Methods("GET")
@@ -102,7 +106,7 @@ func main() {
 	// EXISTS API (ADDED)
 	r.HandleFunc("/users/{id}/exists", h.UserExists).Methods("GET")
 
-	log.Println("User Service running on :8080")
+	log.Println("User Service with Auth running on :8080")
 	log.Fatal(http.ListenAndServe(
 		":8080",
 		otelhttp.NewHandler(r, "user-service"),

@@ -27,6 +27,31 @@ func (h *UserHandler) Health(w http.ResponseWriter, _ *http.Request) {
 }
 
 // =========================
+// LOGIN HANDLER (NEW)
+// =========================
+func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var creds struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.service.Login(creds.Email, creds.Password)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	user.Password = "" // Đảm bảo không gửi password hash về
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(user)
+}
+
+// =========================
 // GET ALL USERS
 // =========================
 func (h *UserHandler) GetUsers(w http.ResponseWriter, _ *http.Request) {
@@ -41,7 +66,7 @@ func (h *UserHandler) GetUsers(w http.ResponseWriter, _ *http.Request) {
 }
 
 // =========================
-// CREATE USER
+// CREATE USER / REGISTER
 // =========================
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var user model.User
@@ -56,6 +81,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user.Password = "" // Bảo mật
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(user)
@@ -107,7 +133,7 @@ func (h *UserHandler) GetUserRole(w http.ResponseWriter, r *http.Request) {
 }
 
 // =========================
-// UPDATE USER (PARTIAL UPDATE)
+// UPDATE USER
 // =========================
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
@@ -147,7 +173,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // =========================
-// DELETE USER (SOFT DELETE)
+// DELETE USER
 // =========================
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]

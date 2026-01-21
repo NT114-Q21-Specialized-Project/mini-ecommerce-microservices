@@ -1,8 +1,25 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Xóa bảng nếu tồn tại để tránh lỗi khi init lại
+DROP TABLE IF EXISTS users;
+
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    role VARCHAR(20) DEFAULT 'CUSTOMER', -- ADMIN, SELLER, CUSTOMER
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Khởi tạo ngay 1 tài khoản Admin gốc (Mật khẩu: admin123)
+-- Password đã được hash bằng bcrypt (cost 10)
+INSERT INTO users (name, email, password, role, is_active)
+VALUES (
+    'Super Admin', 
+    'admin@ems.com', 
+    '$2a$10$fV3zI.Mpt5U/8H5F4E4ELe7mX.qO6I5FvL/pL1.A.v6E.qO6I5FvL', 
+    'ADMIN', 
+    true
+) ON CONFLICT (email) DO NOTHING;
