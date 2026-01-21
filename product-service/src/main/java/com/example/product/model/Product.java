@@ -1,7 +1,6 @@
 package com.example.product.model;
 
 import jakarta.persistence.*;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -10,15 +9,19 @@ import java.util.UUID;
 public class Product {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID id;
 
+    @Column(nullable = false)
     private String name;
 
+    @Column(nullable = false)
     private Double price;
 
+    @Column(nullable = false)
     private Integer stock;
 
+    @Column(name = "created_at", updatable = false)
     private Instant createdAt = Instant.now();
 
     public UUID getId() {

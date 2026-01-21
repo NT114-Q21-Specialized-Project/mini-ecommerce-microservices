@@ -58,19 +58,21 @@ public class ProductService {
     // INTERNAL: CHECK SELLER ROLE
     // =========================
     private void validateSeller(UUID userId) {
-
+        // user-service là tên container trong docker-compose
         String url = "http://user-service:8080/users/" + userId + "/role";
 
         UserRoleResponse response;
 
         try {
             response = restTemplate.getForObject(url, UserRoleResponse.class);
-
         } catch (HttpClientErrorException.NotFound e) {
             throw new IllegalArgumentException("User not found");
-
+        } catch (HttpClientErrorException.Forbidden e) {
+            throw new IllegalArgumentException("Access denied by user-service");
         } catch (ResourceAccessException e) {
-            throw new IllegalStateException("User service unavailable");
+            throw new IllegalStateException("User service unavailable at " + url);
+        } catch (Exception e) {
+            throw new IllegalStateException("Error communicating with user-service: " + e.getMessage());
         }
 
         if (response == null || response.getRole() == null) {
