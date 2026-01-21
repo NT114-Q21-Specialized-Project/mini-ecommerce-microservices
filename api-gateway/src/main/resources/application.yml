@@ -13,7 +13,8 @@ spring:
 
       routes:
         # ======================
-        # USER SERVICE - HEALTH CHECK (Bổ sung để tránh lỗi UUID)
+        # USER SERVICE - HEALTH CHECK
+        # (Bổ sung để tránh lỗi UUID khi gọi /api/users/health)
         # ======================
         - id: user-service-health
           uri: http://user-service:8080
@@ -24,8 +25,8 @@ spring:
 
         # ======================
         # USER SERVICE (Go)
-        # Gọi: http://localhost:9000/api/users 
-        # Chuyển tới: http://user-service:8080/users
+        # Gọi:     http://localhost:9000/api/users
+        # Chuyển:  http://user-service:8080/users
         # ======================
         - id: user-service
           uri: http://user-service:8080
@@ -36,8 +37,8 @@ spring:
 
         # ======================
         # PRODUCT SERVICE (Java)
-        # Gọi: http://localhost:9000/api/products
-        # Chuyển tới: http://product-service:8080/products
+        # Gọi:     http://localhost:9000/api/products
+        # Chuyển:  http://product-service:8080/products
         # ======================
         - id: product-service
           uri: http://product-service:8080
@@ -48,8 +49,8 @@ spring:
 
         # ======================
         # ORDER SERVICE (Java)
-        # Gọi: http://localhost:9000/api/orders
-        # Chuyển tới: http://order-service:8080/orders
+        # Gọi:     http://localhost:9000/api/orders
+        # Chuyển:  http://order-service:8080/orders
         # ======================
         - id: order-service
           uri: http://order-service:8080
