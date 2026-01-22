@@ -11,6 +11,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/products")
+// ĐÃ XÓA @CrossOrigin để tránh lỗi Multiple Origin Not Allowed khi qua Gateway
 public class ProductController {
 
     private final ProductService service;
@@ -24,9 +25,16 @@ public class ProductController {
     // =========================
     @PostMapping
     public ResponseEntity<?> create(
-            @RequestHeader("X-User-Id") String userIdHeader,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
             @RequestBody Product product
     ) {
+        // Kiểm tra nếu thiếu Header
+        if (userIdHeader == null || userIdHeader.isEmpty()) {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body("Missing X-User-Id header");
+        }
+
         UUID userId;
 
         // 1️⃣ Validate header
@@ -35,7 +43,7 @@ public class ProductController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
-                    .body("Invalid X-User-Id header");
+                    .body("Invalid X-User-Id header format");
         }
 
         // 2️⃣ Business + infra handling

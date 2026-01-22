@@ -7,6 +7,7 @@ import Message from './components/Layout/Message';
 import AuthForm from './components/Auth/AuthForm';
 import UserSidebar from './components/User/UserSidebar';
 import ProductList from './components/Product/ProductList';
+import ProductForm from './components/Product/ProductForm';
 
 const GATEWAY_URL = "http://localhost:9000/api";
 
@@ -18,6 +19,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'CUSTOMER' });
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
@@ -73,6 +75,31 @@ function App() {
     showMsg('success', 'Đã đăng xuất');
   };
 
+  const handleAddProduct = async (productData) => {
+    if (!currentUser) return showMsg('error', 'Vui lòng đăng nhập!');
+    
+    setLoading(true);
+    try {
+      // CẬP NHẬT: Gửi kèm Header X-User-Id để Backend định danh Seller
+      await axios.post(`${GATEWAY_URL}/products`, productData, {
+        headers: {
+          'X-User-Id': currentUser.id
+        }
+      });
+      showMsg('success', 'Đã đăng sản phẩm thành công!');
+      setIsProductModalOpen(false);
+      fetchProducts();
+    } catch (err) {
+      // Hiển thị lỗi chi tiết từ Backend nếu có
+      const errMsg = typeof err.response?.data === 'string' 
+        ? err.response.data 
+        : (err.response?.data?.message || 'Lỗi khi đăng sản phẩm');
+      showMsg('error', errMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const createOrder = async (productId, price) => {
     if (!currentUser) return showMsg('error', 'Vui lòng đăng nhập!');
     if (currentUser.role === 'ADMIN') return showMsg('error', 'Admin không thể mua hàng!');
@@ -109,9 +136,17 @@ function App() {
             onBuy={createOrder} 
             loading={loading}
             currentUser={currentUser}
+            onOpenAddModal={() => setIsProductModalOpen(true)}
           />
         </div>
       )}
+
+      <ProductForm 
+        isOpen={isProductModalOpen} 
+        onClose={() => setIsProductModalOpen(false)}
+        onSubmit={handleAddProduct}
+        loading={loading}
+      />
     </div>
   );
 }
