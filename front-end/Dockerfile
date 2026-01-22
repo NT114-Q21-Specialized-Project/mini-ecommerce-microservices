@@ -1,19 +1,27 @@
-# Sử dụng Node.js làm base image
-FROM node:20-alpine
+# ===== Build stage =====
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Chỉ copy package files trước để tối ưu build
+# Copy package files trước để tận dụng cache
 COPY package*.json ./
+RUN npm ci
 
-# Xóa bỏ hoàn toàn node_modules cũ (nếu có) và cài mới sạch sẽ
-RUN rm -rf node_modules && npm install
-
-# Copy toàn bộ code (trừ những thứ trong .dockerignore)
+# Copy source code
 COPY . .
 
-# Expose port
-EXPOSE 5173
+# Build frontend (Vite -> dist/)
+RUN npm run build
 
-# Chạy với host 0.0.0.0 để Docker map được port ra ngoài
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# ===== Runtime stage =====
+FROM nginx:alpine
+
+# Copy static files từ builder
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# (Tuỳ chọn) custom nginx config
+# COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

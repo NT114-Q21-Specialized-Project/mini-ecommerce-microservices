@@ -1,0 +1,19 @@
+# Sử dụng Node.js làm base image
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Chỉ copy package files trước để tận dụng cache và tối ưu build
+COPY package*.json ./
+
+# Cài dependency theo lockfile (chuẩn CI/CD)
+RUN npm ci
+
+# Copy toàn bộ code (trừ những thứ trong .dockerignore)
+COPY . .
+
+# Expose port cho Vite dev server
+EXPOSE 5173
+
+# Chạy với host 0.0.0.0 để Docker map được port ra ngoài
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
