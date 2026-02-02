@@ -150,7 +150,7 @@ services:
     build: ./front-end
     container_name: front-end
     ports:
-      - "5173:5173"
+      - "5173:80"
     depends_on:
       - api-gateway
     restart: unless-stopped
