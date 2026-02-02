@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class ApiGatewayApplication {
 
     public static void main(String[] args) {
+        System.out.println("🚀 API Gateway started - CI test"); // <-- dòng test
         SpringApplication.run(ApiGatewayApplication.class, args);
     }
 
