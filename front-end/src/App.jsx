@@ -18,9 +18,17 @@ function App() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'CUSTOMER' });
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'CUSTOMER'
+  });
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
+  // =========================
+  // INIT
+  // =========================
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
@@ -31,42 +39,74 @@ function App() {
     if (currentUser?.role === 'ADMIN') fetchUsers();
   }, [currentUser]);
 
+  // =========================
+  // HELPERS
+  // =========================
   const showMsg = (type, text) => {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: '', text: '' }), 4000);
   };
 
+  // =========================
+  // API CALLS
+  // =========================
   const fetchUsers = async () => {
     try {
       const res = await axios.get(`${GATEWAY_URL}/users`);
       setUsers(res.data);
-    } catch (err) { console.error("Error fetching users", err); }
+    } catch (err) {
+      console.error("Error fetching users", err);
+    }
   };
 
   const fetchProducts = async () => {
     try {
       const res = await axios.get(`${GATEWAY_URL}/products`);
       setProducts(res.data);
-    } catch (err) { console.error("Error fetching products", err); }
+    } catch (err) {
+      console.error("Error fetching products", err);
+    }
   };
 
+  // =========================
+  // AUTH
+  // =========================
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const endpoint = isLoginView ? '/users/login' : '/users/register';
+
     try {
-      const res = await axios.post(`${GATEWAY_URL}${endpoint}`, formData);
       if (isLoginView) {
+        // LOGIN
+        const res = await axios.post(`${GATEWAY_URL}/users/login`, {
+          email: formData.email,
+          password: formData.password,
+        });
+
         setCurrentUser(res.data);
         localStorage.setItem('user', JSON.stringify(res.data));
         showMsg('success', `Chào mừng ${res.data.name}!`);
       } else {
+        // REGISTER
+        await axios.post(`${GATEWAY_URL}/users`, {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          role: formData.role,
+        });
+
         showMsg('success', 'Đăng ký thành công! Hãy đăng nhập.');
         setIsLoginView(true);
       }
+
+      // Reset form sau auth
+      setFormData({ name: '', email: '', password: '', role: 'CUSTOMER' });
+
     } catch (err) {
       showMsg('error', err.response?.data || 'Lỗi xác thực');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = () => {
@@ -75,12 +115,14 @@ function App() {
     showMsg('success', 'Đã đăng xuất');
   };
 
+  // =========================
+  // PRODUCT
+  // =========================
   const handleAddProduct = async (productData) => {
     if (!currentUser) return showMsg('error', 'Vui lòng đăng nhập!');
-    
+
     setLoading(true);
     try {
-      // CẬP NHẬT: Gửi kèm Header X-User-Id để Backend định danh Seller
       await axios.post(`${GATEWAY_URL}/products`, productData, {
         headers: {
           'X-User-Id': currentUser.id
@@ -90,16 +132,19 @@ function App() {
       setIsProductModalOpen(false);
       fetchProducts();
     } catch (err) {
-      // Hiển thị lỗi chi tiết từ Backend nếu có
-      const errMsg = typeof err.response?.data === 'string' 
-        ? err.response.data 
-        : (err.response?.data?.message || 'Lỗi khi đăng sản phẩm');
+      const errMsg =
+        typeof err.response?.data === 'string'
+          ? err.response.data
+          : (err.response?.data?.message || 'Lỗi khi đăng sản phẩm');
       showMsg('error', errMsg);
     } finally {
       setLoading(false);
     }
   };
 
+  // =========================
+  // ORDER
+  // =========================
   const createOrder = async (productId, price) => {
     if (!currentUser) return showMsg('error', 'Vui lòng đăng nhập!');
     if (currentUser.role === 'ADMIN') return showMsg('error', 'Admin không thể mua hàng!');
@@ -107,33 +152,46 @@ function App() {
     setLoading(true);
     try {
       await axios.post(`${GATEWAY_URL}/orders`, null, {
-        params: { userId: currentUser.id, productId, quantity: 1, totalAmount: price }
+        params: {
+          userId: currentUser.id,
+          productId,
+          quantity: 1,
+          totalAmount: price
+        }
       });
-      showMsg('success', `Đặt hàng thành công!`);
+      showMsg('success', 'Đặt hàng thành công!');
       fetchProducts();
     } catch (err) {
       showMsg('error', err.response?.data || 'Lỗi đặt hàng');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // =========================
+  // RENDER
+  // =========================
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
       <Header currentUser={currentUser} onLogout={handleLogout} />
       <Message message={message} />
 
       {!currentUser ? (
-        <AuthForm 
-          isLoginView={isLoginView} setIsLoginView={setIsLoginView}
-          formData={formData} setFormData={setFormData}
-          handleAuth={handleAuth} loading={loading}
+        <AuthForm
+          isLoginView={isLoginView}
+          setIsLoginView={setIsLoginView}
+          formData={formData}
+          setFormData={setFormData}
+          handleAuth={handleAuth}
+          loading={loading}
         />
       ) : (
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
           <UserSidebar currentUser={currentUser} users={users} />
-          <ProductList 
-            products={products} 
-            onRefresh={fetchProducts} 
-            onBuy={createOrder} 
+          <ProductList
+            products={products}
+            onRefresh={fetchProducts}
+            onBuy={createOrder}
             loading={loading}
             currentUser={currentUser}
             onOpenAddModal={() => setIsProductModalOpen(true)}
@@ -141,8 +199,8 @@ function App() {
         </div>
       )}
 
-      <ProductForm 
-        isOpen={isProductModalOpen} 
+      <ProductForm
+        isOpen={isProductModalOpen}
         onClose={() => setIsProductModalOpen(false)}
         onSubmit={handleAddProduct}
         loading={loading}
