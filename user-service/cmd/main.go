@@ -86,27 +86,43 @@ func main() {
 	// =========================
 	r := mux.NewRouter()
 
+	// =========================
+	// SYSTEM / HEALTH
+	// =========================
 	r.HandleFunc("/health", h.Health).Methods("GET")
 
-	// AUTH & REGISTER ROUTES (ADDED)
+	// =========================
+	// AUTH
+	// =========================
 	r.HandleFunc("/users/login", h.Login).Methods("POST")
-	r.HandleFunc("/users/register", h.CreateUser).Methods("POST")
 
+	// =========================
+	// PUBLIC USER APIs
+	// =========================
 	r.HandleFunc("/users", h.GetUsers).Methods("GET")
-	r.HandleFunc("/users", h.CreateUser).Methods("POST") // Vẫn giữ cho Admin tạo hộ
-	
-	// USER BY ID ROUTES (UPDATED)
+	r.HandleFunc("/users", h.CreateUser).Methods("POST")
+
+	r.HandleFunc("/users/by-email", h.GetUserByEmail).Methods("GET")
+	r.HandleFunc("/users/email-exists", h.EmailExists).Methods("GET")
+
 	r.HandleFunc("/users/{id}", h.GetUserByID).Methods("GET")
 	r.HandleFunc("/users/{id}", h.UpdateUser).Methods("PUT")
 	r.HandleFunc("/users/{id}", h.DeleteUser).Methods("DELETE")
 
-	//ROLE API (FIXED)
-	r.HandleFunc("/users/{id}/role", h.GetUserRole).Methods("GET")
-	
-	// EXISTS API (ADDED)
-	r.HandleFunc("/users/{id}/exists", h.UserExists).Methods("GET")
+	r.HandleFunc("/users/{id}/activate", h.ActivateUser).Methods("PATCH")
+	r.HandleFunc("/users/{id}/deactivate", h.DeactivateUser).Methods("PATCH")
 
-	log.Println("User Service with Auth running on :8080")
+	r.HandleFunc("/users/stats", h.UserStats).Methods("GET")
+
+	// =========================
+	// INTERNAL APIs (SERVICE-TO-SERVICE)
+	// =========================
+	r.HandleFunc("/users/{id}/exists", h.UserExists).Methods("GET")
+	r.HandleFunc("/users/{id}/role", h.GetUserRole).Methods("GET")
+
+	r.HandleFunc("/internal/users/{id}/validate", h.ValidateUser).Methods("GET")
+
+	log.Println("User Service running on :8080")
 	log.Fatal(http.ListenAndServe(
 		":8080",
 		otelhttp.NewHandler(r, "user-service"),

@@ -72,16 +72,46 @@ API Gateway chịu trách nhiệm:
 **Gateway Route:** `/api/users/**`  
 **Service nội bộ:** User Service (port **8080**)
 
+#### 🧩 Public APIs (Client / Frontend sử dụng)
+
 | Method | Endpoint (Gateway) | Mô tả |
 |------|--------------------|------|
-| GET | `/api/users/health` | Health check User Service (Gateway rewrite sang `/health`) |
-| POST | `/api/users` | Tạo người dùng mới (`CUSTOMER` hoặc `SELLER`) |
-| GET | `/api/users` | Lấy danh sách toàn bộ user (chỉ user đang active) |
-| GET | `/api/users/{id}` | Lấy thông tin chi tiết user theo ID |
-| PUT | `/api/users/{id}` | Cập nhật thông tin user (partial update: name, email) |
-| DELETE | `/api/users/{id}` | Xóa user (soft delete – set `is_active = false`) |
-| GET | `/api/users/{id}/exists` | Kiểm tra user có tồn tại và đang active hay không (Internal API) |
-| GET | `/api/users/{id}/role` | Lấy role của user (Internal API cho Product / Order Service) |
+| GET | `/api/users/health` | Health check User Service |
+| POST | `/api/users` | Tạo người dùng mới (`CUSTOMER`, `SELLER`) |
+| POST | `/api/users/login` | Đăng nhập người dùng (demo auth) |
+| GET | `/api/users` | Lấy danh sách user đang active |
+| GET | `/api/users/{id}` | Lấy thông tin user theo ID |
+| GET | `/api/users/by-email?email=` | Lấy thông tin user theo email |
+| GET | `/api/users/email-exists?email=` | Kiểm tra email đã tồn tại |
+| PUT | `/api/users/{id}` | Cập nhật thông tin user |
+| DELETE | `/api/users/{id}` | Xóa user (soft delete) |
+| PATCH | `/api/users/{id}/deactivate` | Vô hiệu hóa user |
+| PATCH | `/api/users/{id}/activate` | Kích hoạt lại user |
+| GET | `/api/users/stats` | Thống kê user (total, active, inactive, theo role) |
+
+---
+
+#### 🔒 Internal APIs (Service-to-Service ONLY)
+
+| Method | Endpoint | Mô tả |
+|------|---------|------|
+| GET | `/api/users/{id}/exists` | Kiểm tra user tồn tại & active |
+| GET | `/api/users/{id}/role` | Lấy role user |
+| GET | `/api/users/{id}/validate` | Validate user (exist, active, role) |
+
+---
+
+#### 🩺 System Endpoints
+
+| Method | Endpoint | Mô tả |
+|------|---------|------|
+| GET | `/health` | Service up & DB connected |
+
+**Ví dụ gọi API:**
+```bash
+curl -s http://localhost:9000/api/users | jq
+```
+
 
 **Ví dụ gọi API:**
 ```bash

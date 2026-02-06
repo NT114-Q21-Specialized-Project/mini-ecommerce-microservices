@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+
 	"golang.org/x/crypto/bcrypt"
 
 	"user-service/internal/model"
@@ -97,4 +98,46 @@ func isValidRole(role string) bool {
 	default:
 		return false
 	}
+}
+
+// =========================
+// GET USER BY EMAIL (PUBLIC)
+// =========================
+func (s *UserService) GetUserByEmail(email string) (*model.User, error) {
+	return s.repo.FindByEmailPublic(email)
+}
+
+// =========================
+// EMAIL EXISTS
+// =========================
+func (s *UserService) EmailExists(email string) (bool, error) {
+	return s.repo.EmailExists(email)
+}
+
+// =========================
+// ACTIVATE USER
+// =========================
+func (s *UserService) ActivateUser(id string) error {
+	return s.repo.Activate(id)
+}
+
+// =========================
+// DEACTIVATE USER
+// =========================
+func (s *UserService) DeactivateUser(id string) error {
+	return s.repo.Deactivate(id)
+}
+
+// =========================
+// USER STATS
+// =========================
+func (s *UserService) UserStats() (map[string]any, error) {
+	return s.repo.Stats()
+}
+
+// =========================
+// VALIDATE USER (INTERNAL)
+// =========================
+func (s *UserService) ValidateUser(id string) (bool, string, bool, error) {
+	return s.repo.ValidateUser(id)
 }

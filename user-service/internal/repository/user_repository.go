@@ -211,3 +211,151 @@ func (r *UserRepository) Exists(id string) (bool, error) {
 
 	return exists, err
 }
+
+// =========================
+// FIND USER BY EMAIL (PUBLIC - NO PASSWORD)
+// =========================
+func (r *UserRepository) FindByEmailPublic(email string) (*model.User, error) {
+	var u model.User
+
+	err := r.db.QueryRow(`
+        SELECT id, name, email, role, is_active, created_at
+        FROM users
+        WHERE email = $1 AND is_active = true
+    `, email).Scan(
+		&u.ID,
+		&u.Name,
+		&u.Email,
+		&u.Role,
+		&u.IsActive,
+		&u.CreatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &u, nil
+}
+
+// =========================
+// CHECK EMAIL EXISTS
+// =========================
+func (r *UserRepository) EmailExists(email string) (bool, error) {
+	var exists bool
+
+	err := r.db.QueryRow(`
+        SELECT EXISTS (
+            SELECT 1 FROM users WHERE email = $1
+        )
+    `, email).Scan(&exists)
+
+	return exists, err
+}
+
+// =========================
+// ACTIVATE USER
+// =========================
+func (r *UserRepository) Activate(id string) error {
+	_, err := r.db.Exec(`
+        UPDATE users
+        SET is_active = true
+        WHERE id = $1
+    `, id)
+
+	return err
+}
+
+// =========================
+// DEACTIVATE USER
+// =========================
+func (r *UserRepository) Deactivate(id string) error {
+	_, err := r.db.Exec(`
+        UPDATE users
+        SET is_active = false
+        WHERE id = $1
+    `, id)
+
+	return err
+}
+
+// =========================
+// USER STATS
+// =========================
+func (r *UserRepository) Stats() (map[string]any, error) {
+	stats := make(map[string]any)
+
+	var total int
+	var active int
+	var inactive int
+
+	err := r.db.QueryRow(`
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE is_active = true) AS active,
+            COUNT(*) FILTER (WHERE is_active = false) AS inactive
+        FROM users
+    `).Scan(&total, &active, &inactive)
+
+	if err != nil {
+		return nil, err
+	}
+
+	stats["total"] = total
+	stats["active"] = active
+	stats["inactive"] = inactive
+
+	rows, err := r.db.Query(`
+        SELECT role, COUNT(*) 
+        FROM users
+        GROUP BY role
+    `)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	roleStats := make(map[string]int)
+	for rows.Next() {
+		var role string
+		var count int
+		if err := rows.Scan(&role, &count); err != nil {
+			return nil, err
+		}
+		roleStats[role] = count
+	}
+
+	stats["by_role"] = roleStats
+	return stats, nil
+}
+
+
+// =========================
+// VALIDATE USER (INTERNAL)
+// =========================
+func (r *UserRepository) ValidateUser(id string) (bool, string, bool, error) {
+	var exists bool
+	var role string
+	var active bool
+
+	err := r.db.QueryRow(`
+        SELECT 
+            EXISTS (SELECT 1 FROM users WHERE id = $1),
+            COALESCE(role, ''),
+            COALESCE(is_active, false)
+        FROM users
+        WHERE id = $1
+    `, id).Scan(&exists, &role, &active)
+
+	if err == sql.ErrNoRows {
+		return false, "", false, nil
+	}
+	if err != nil {
+		return false, "", false, err
+	}
+
+	return exists, role, active, nil
+}

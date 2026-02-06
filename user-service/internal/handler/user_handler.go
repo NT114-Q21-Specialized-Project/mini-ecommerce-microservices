@@ -66,6 +66,52 @@ func (h *UserHandler) GetUsers(w http.ResponseWriter, _ *http.Request) {
 }
 
 // =========================
+// GET USER BY EMAIL
+// =========================
+func (h *UserHandler) GetUserByEmail(w http.ResponseWriter, r *http.Request) {
+	email := r.URL.Query().Get("email")
+	if email == "" {
+		http.Error(w, "email is required", http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.service.GetUserByEmail(email)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if user == nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(user)
+}
+
+// =========================
+// EMAIL EXISTS
+// =========================
+func (h *UserHandler) EmailExists(w http.ResponseWriter, r *http.Request) {
+	email := r.URL.Query().Get("email")
+	if email == "" {
+		http.Error(w, "email is required", http.StatusBadRequest)
+		return
+	}
+
+	exists, err := h.service.EmailExists(email)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{
+		"exists": exists,
+	})
+}
+
+// =========================
 // CREATE USER / REGISTER
 // =========================
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
@@ -173,17 +219,45 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // =========================
-// DELETE USER
+// ACTIVATE USER
 // =========================
-func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) ActivateUser(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
-	if err := h.service.DeleteUser(id); err != nil {
+	if err := h.service.ActivateUser(id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// =========================
+// DEACTIVATE USER
+// =========================
+func (h *UserHandler) DeactivateUser(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	if err := h.service.DeactivateUser(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// =========================
+// USER STATS
+// =========================
+func (h *UserHandler) UserStats(w http.ResponseWriter, _ *http.Request) {
+	stats, err := h.service.UserStats()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
 }
 
 // =========================
@@ -202,4 +276,39 @@ func (h *UserHandler) UserExists(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]bool{
 		"exists": exists,
 	})
+}
+
+// =========================
+// INTERNAL API – VALIDATE USER
+// =========================
+func (h *UserHandler) ValidateUser(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	valid, role, active, err := h.service.ValidateUser(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"valid":    valid,
+		"id":       id,
+		"role":     role,
+		"isActive": active,
+	})
+}
+
+// =========================
+// DELETE USER (SOFT DELETE)
+// =========================
+func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	if err := h.service.DeleteUser(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
