@@ -221,9 +221,12 @@ pipeline {
                     git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/NT114-Q21-Specialized-Project/kubernetes-hub.git
                     cd ${GITOPS_DIR}
 
+                    git config user.name "jenkins-ci"
+                    git config user.email "jenkins@ci.local"
+
                     update_image () {
-                      SERVICE=$1
-                      yq e -i '.images[] |=
+                    SERVICE=$1
+                    yq e -i '.images[] |=
                         (select(.name == "tienphatng237/mini-ecommerce-'$SERVICE'").newTag = "'$IMAGE_TAG'")' \
                         overlays/dev/kustomization.yaml
                     }
@@ -235,12 +238,13 @@ pipeline {
                     [ "$BUILD_FRONTEND" = "true" ]     && update_image frontend
 
                     if git diff --quiet; then
-                      echo "No GitOps changes"
-                      exit 0
+                    echo "No GitOps changes"
+                    exit 0
                     fi
 
                     git commit -am "gitops(dev): update image tags to ${IMAGE_TAG}"
                     git push origin main
+
                     '''
                 }
             }
