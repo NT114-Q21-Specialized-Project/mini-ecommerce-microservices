@@ -8,17 +8,24 @@ pipeline {
 
     environment {
         DOCKERHUB_USER = "tienphatng237"
-        IMAGE_TAG = "${env.GIT_COMMIT.take(7)}"
+        PROJECT        = "mini-ecommerce"
+        IMAGE_TAG      = "${env.GIT_COMMIT.take(7)}"
     }
 
     stages {
 
+        /* =========================
+           CHECKOUT
+        ========================= */
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
+        /* =========================
+           DETECT CHANGED SERVICES
+        ========================= */
         stage('Detect Changed Services') {
             steps {
                 script {
@@ -34,19 +41,20 @@ pipeline {
                     env.BUILD_FRONTEND      = changedFiles.any { it.startsWith("front-end/") } ? "true" : "false"
 
                     echo """
-                    Change summary:
-                      api-gateway  : ${env.BUILD_API_GATEWAY}
-                      user-service : ${env.BUILD_USER_SERVICE}
-                      product      : ${env.BUILD_PRODUCT}
-                      order        : ${env.BUILD_ORDER}
-                      front-end    : ${env.BUILD_FRONTEND}
+                    ===== Change summary =====
+                      api-gateway   : ${env.BUILD_API_GATEWAY}
+                      user-service  : ${env.BUILD_USER_SERVICE}
+                      product       : ${env.BUILD_PRODUCT}
+                      order         : ${env.BUILD_ORDER}
+                      front-end     : ${env.BUILD_FRONTEND}
+                    ==========================
                     """
                 }
             }
         }
 
         /* =========================
-           BUILD STAGE
+           BUILD IMAGES
         ========================= */
         stage('Build Images') {
             parallel {
@@ -54,35 +62,55 @@ pipeline {
                 stage('Build api-gateway') {
                     when { environment name: 'BUILD_API_GATEWAY', value: 'true' }
                     steps {
-                        sh 'docker build -t $DOCKERHUB_USER/api-gateway:$IMAGE_TAG ./api-gateway'
+                        sh """
+                          docker build \
+                            -t ${DOCKERHUB_USER}/${PROJECT}-api-gateway:${IMAGE_TAG} \
+                            ./api-gateway
+                        """
                     }
                 }
 
                 stage('Build user-service') {
                     when { environment name: 'BUILD_USER_SERVICE', value: 'true' }
                     steps {
-                        sh 'docker build -t $DOCKERHUB_USER/user-service:$IMAGE_TAG ./user-service'
+                        sh """
+                          docker build \
+                            -t ${DOCKERHUB_USER}/${PROJECT}-user-service:${IMAGE_TAG} \
+                            ./user-service
+                        """
                     }
                 }
 
                 stage('Build product-service') {
                     when { environment name: 'BUILD_PRODUCT', value: 'true' }
                     steps {
-                        sh 'docker build -t $DOCKERHUB_USER/product-service:$IMAGE_TAG ./product-service'
+                        sh """
+                          docker build \
+                            -t ${DOCKERHUB_USER}/${PROJECT}-product-service:${IMAGE_TAG} \
+                            ./product-service
+                        """
                     }
                 }
 
                 stage('Build order-service') {
                     when { environment name: 'BUILD_ORDER', value: 'true' }
                     steps {
-                        sh 'docker build -t $DOCKERHUB_USER/order-service:$IMAGE_TAG ./order-service'
+                        sh """
+                          docker build \
+                            -t ${DOCKERHUB_USER}/${PROJECT}-order-service:${IMAGE_TAG} \
+                            ./order-service
+                        """
                     }
                 }
 
-                stage('Build front-end') {
+                stage('Build frontend') {
                     when { environment name: 'BUILD_FRONTEND', value: 'true' }
                     steps {
-                        sh 'docker build -t $DOCKERHUB_USER/front-end:$IMAGE_TAG ./front-end'
+                        sh """
+                          docker build \
+                            -t ${DOCKERHUB_USER}/${PROJECT}-frontend:${IMAGE_TAG} \
+                            ./front-end
+                        """
                     }
                 }
             }
@@ -94,11 +122,11 @@ pipeline {
         stage('Docker Login') {
             when {
                 expression {
-                    env.BUILD_API_GATEWAY == "true" ||
+                    env.BUILD_API_GATEWAY  == "true" ||
                     env.BUILD_USER_SERVICE == "true" ||
-                    env.BUILD_PRODUCT == "true" ||
-                    env.BUILD_ORDER == "true" ||
-                    env.BUILD_FRONTEND == "true"
+                    env.BUILD_PRODUCT      == "true" ||
+                    env.BUILD_ORDER        == "true" ||
+                    env.BUILD_FRONTEND     == "true"
                 }
             }
             steps {
@@ -115,7 +143,7 @@ pipeline {
         }
 
         /* =========================
-           PUSH STAGE
+           PUSH IMAGES STAGE
         ========================= */
         stage('Push Images') {
             parallel {
@@ -123,55 +151,60 @@ pipeline {
                 stage('Push api-gateway') {
                     when { environment name: 'BUILD_API_GATEWAY', value: 'true' }
                     steps {
-                        sh '''
-                          docker tag  $DOCKERHUB_USER/api-gateway:$IMAGE_TAG $DOCKERHUB_USER/api-gateway:latest
-                          docker push $DOCKERHUB_USER/api-gateway:$IMAGE_TAG
-                          docker push $DOCKERHUB_USER/api-gateway:latest
-                        '''
+                        sh """
+                          docker tag  ${DOCKERHUB_USER}/${PROJECT}-api-gateway:${IMAGE_TAG} \
+                                      ${DOCKERHUB_USER}/${PROJECT}-api-gateway:latest
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-api-gateway:${IMAGE_TAG}
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-api-gateway:latest
+                        """
                     }
                 }
 
                 stage('Push user-service') {
                     when { environment name: 'BUILD_USER_SERVICE', value: 'true' }
                     steps {
-                        sh '''
-                          docker tag  $DOCKERHUB_USER/user-service:$IMAGE_TAG $DOCKERHUB_USER/user-service:latest
-                          docker push $DOCKERHUB_USER/user-service:$IMAGE_TAG
-                          docker push $DOCKERHUB_USER/user-service:latest
-                        '''
+                        sh """
+                          docker tag  ${DOCKERHUB_USER}/${PROJECT}-user-service:${IMAGE_TAG} \
+                                      ${DOCKERHUB_USER}/${PROJECT}-user-service:latest
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-user-service:${IMAGE_TAG}
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-user-service:latest
+                        """
                     }
                 }
 
                 stage('Push product-service') {
                     when { environment name: 'BUILD_PRODUCT', value: 'true' }
                     steps {
-                        sh '''
-                          docker tag  $DOCKERHUB_USER/product-service:$IMAGE_TAG $DOCKERHUB_USER/product-service:latest
-                          docker push $DOCKERHUB_USER/product-service:$IMAGE_TAG
-                          docker push $DOCKERHUB_USER/product-service:latest
-                        '''
+                        sh """
+                          docker tag  ${DOCKERHUB_USER}/${PROJECT}-product-service:${IMAGE_TAG} \
+                                      ${DOCKERHUB_USER}/${PROJECT}-product-service:latest
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-product-service:${IMAGE_TAG}
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-product-service:latest
+                        """
                     }
                 }
 
                 stage('Push order-service') {
                     when { environment name: 'BUILD_ORDER', value: 'true' }
                     steps {
-                        sh '''
-                          docker tag  $DOCKERHUB_USER/order-service:$IMAGE_TAG $DOCKERHUB_USER/order-service:latest
-                          docker push $DOCKERHUB_USER/order-service:$IMAGE_TAG
-                          docker push $DOCKERHUB_USER/order-service:latest
-                        '''
+                        sh """
+                          docker tag  ${DOCKERHUB_USER}/${PROJECT}-order-service:${IMAGE_TAG} \
+                                      ${DOCKERHUB_USER}/${PROJECT}-order-service:latest
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-order-service:${IMAGE_TAG}
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-order-service:latest
+                        """
                     }
                 }
 
-                stage('Push front-end') {
+                stage('Push frontend') {
                     when { environment name: 'BUILD_FRONTEND', value: 'true' }
                     steps {
-                        sh '''
-                          docker tag  $DOCKERHUB_USER/front-end:$IMAGE_TAG $DOCKERHUB_USER/front-end:latest
-                          docker push $DOCKERHUB_USER/front-end:$IMAGE_TAG
-                          docker push $DOCKERHUB_USER/front-end:latest
-                        '''
+                        sh """
+                          docker tag  ${DOCKERHUB_USER}/${PROJECT}-frontend:${IMAGE_TAG} \
+                                      ${DOCKERHUB_USER}/${PROJECT}-frontend:latest
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-frontend:${IMAGE_TAG}
+                          docker push ${DOCKERHUB_USER}/${PROJECT}-frontend:latest
+                        """
                     }
                 }
             }
@@ -183,7 +216,7 @@ pipeline {
             sh 'docker logout || true'
         }
         success {
-            echo "✅ Build & Push pipeline completed successfully"
+            echo "✅ Mini-Ecommerce CI build & push completed successfully"
         }
     }
 }
