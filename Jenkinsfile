@@ -24,34 +24,60 @@ pipeline {
         }
 
         /* =========================
-           DETECT CHANGED SERVICES
+        DETECT CHANGED SERVICES
         ========================= */
         stage('Detect Changed Services') {
             steps {
                 script {
-                    def changedFiles = sh(
+
+                    // Get list of changed files between the last two commits
+                    def changedFilesRaw = sh(
                         script: "git diff --name-only HEAD~1 HEAD || true",
                         returnStdout: true
-                    ).trim().split("\n")
+                    ).trim()
 
-                    env.BUILD_API_GATEWAY   = changedFiles.any { it.startsWith("api-gateway/") } ? "true" : "false"
-                    env.BUILD_USER_SERVICE  = changedFiles.any { it.startsWith("user-service/") } ? "true" : "false"
-                    env.BUILD_PRODUCT       = changedFiles.any { it.startsWith("product-service/") } ? "true" : "false"
-                    env.BUILD_ORDER         = changedFiles.any { it.startsWith("order-service/") } ? "true" : "false"
-                    env.BUILD_FRONTEND      = changedFiles.any { it.startsWith("front-end/") } ? "true" : "false"
+                    def changedFiles = changedFilesRaw
+                        ? changedFilesRaw.split("\n")
+                        : []
+
+                    echo "Changed files:"
+                    changedFiles.each { echo " - ${it}" }
+
+                    // Detect Jenkinsfile changes (CI configuration changes)
+                    def isCiChange = changedFiles.any { it == "Jenkinsfile" }
+
+                    // Detect changes per service directory
+                    env.BUILD_API_GATEWAY  = changedFiles.any { it.startsWith("api-gateway/") }  ? "true" : "false"
+                    env.BUILD_USER_SERVICE = changedFiles.any { it.startsWith("user-service/") } ? "true" : "false"
+                    env.BUILD_PRODUCT      = changedFiles.any { it.startsWith("product-service/") } ? "true" : "false"
+                    env.BUILD_ORDER        = changedFiles.any { it.startsWith("order-service/") } ? "true" : "false"
+                    env.BUILD_FRONTEND     = changedFiles.any { it.startsWith("front-end/") } ? "true" : "false"
+
+                    // If Jenkinsfile is changed → force rebuild ALL services
+                    if (isCiChange) {
+                        echo "⚠️ Jenkinsfile changed → forcing rebuild of ALL services"
+
+                        env.BUILD_API_GATEWAY  = "true"
+                        env.BUILD_USER_SERVICE = "true"
+                        env.BUILD_PRODUCT      = "true"
+                        env.BUILD_ORDER        = "true"
+                        env.BUILD_FRONTEND     = "true"
+                    }
 
                     echo """
-                    ===== Change summary =====
-                      api-gateway   : ${env.BUILD_API_GATEWAY}
-                      user-service  : ${env.BUILD_USER_SERVICE}
-                      product       : ${env.BUILD_PRODUCT}
-                      order         : ${env.BUILD_ORDER}
-                      front-end     : ${env.BUILD_FRONTEND}
-                    ==========================
-                    """
+        ================= CHANGE SUMMARY =================
+        Jenkinsfile   : ${isCiChange}
+        api-gateway   : ${env.BUILD_API_GATEWAY}
+        user-service  : ${env.BUILD_USER_SERVICE}
+        product       : ${env.BUILD_PRODUCT}
+        order         : ${env.BUILD_ORDER}
+        front-end     : ${env.BUILD_FRONTEND}
+        =================================================
+        """
                 }
             }
         }
+
 
         /* =========================
            BUILD IMAGES
