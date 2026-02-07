@@ -7,8 +7,11 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    allowedHosts: [
+      'mini-ecommerce.local'
+    ],
     watch: {
-      usePolling: true, // Giúp hot-reload hoạt động ổn định trong Docker
+      usePolling: true, // Giúp hot-reload ổn định trong Docker
     },
   },
 })
