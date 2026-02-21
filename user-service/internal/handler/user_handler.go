@@ -40,7 +40,7 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.service.Login(creds.Email, creds.Password)
+	user, accessToken, expiresAt, err := h.service.Login(creds.Email, creds.Password)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -48,7 +48,12 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user.Password = "" // Đảm bảo không gửi password hash về
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	json.NewEncoder(w).Encode(map[string]any{
+		"access_token": accessToken,
+		"token_type":   "Bearer",
+		"expires_at":   expiresAt,
+		"user":         user,
+	})
 }
 
 // =========================

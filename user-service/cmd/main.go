@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +37,20 @@ func normalizeOTLPEndpoint(raw string) string {
 	value = strings.TrimPrefix(value, "http://")
 	value = strings.TrimPrefix(value, "https://")
 	return strings.TrimSuffix(value, "/")
+}
+
+func getEnvInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
 }
 
 func initTracer() func() {
@@ -98,8 +113,15 @@ func main() {
 	// =========================
 	// INIT DEPENDENCIES
 	// =========================
+	jwtSecret := getEnv("JWT_SECRET", "mini-ecommerce-super-secret-change-me-please")
+	jwtExpiryMinutes := getEnvInt("JWT_EXPIRES_MINUTES", 120)
+
 	repo := repository.NewUserRepository(cfg.DB)
-	svc := service.NewUserService(repo)
+	svc := service.NewUserService(
+		repo,
+		jwtSecret,
+		time.Duration(jwtExpiryMinutes)*time.Minute,
+	)
 	h := handler.NewUserHandler(svc)
 
 	// =========================

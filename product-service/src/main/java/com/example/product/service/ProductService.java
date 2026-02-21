@@ -1,14 +1,9 @@
 package com.example.product.service;
 
-import com.example.product.dto.UserRoleResponse;
 import com.example.product.model.Product;
 import com.example.product.repository.ProductRepository;
 import jakarta.transaction.Transactional;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.UUID;
@@ -17,25 +12,17 @@ import java.util.UUID;
 public class ProductService {
 
     private final ProductRepository repository;
-    private final RestTemplate restTemplate;
-    private final String userServiceBaseUrl;
-
-    public ProductService(
-            ProductRepository repository,
-            RestTemplate restTemplate,
-            @Value("${clients.user-service.base-url}") String userServiceBaseUrl
-    ) {
+    
+    public ProductService(ProductRepository repository) {
         this.repository = repository;
-        this.restTemplate = restTemplate;
-        this.userServiceBaseUrl = userServiceBaseUrl.replaceAll("/+$", "");
     }
 
     // =========================
-    // CREATE PRODUCT (SELLER ONLY)
+    // CREATE PRODUCT (SELLER / ADMIN)
     // =========================
-    public Product create(Product product, UUID userId) {
+    public Product create(Product product, String userRole) {
         validateProductInput(product);
-        validateSeller(userId);
+        validateCreatorRole(userRole);
         return repository.save(product);
     }
 
@@ -66,32 +53,25 @@ public class ProductService {
         }
     }
 
-    // =========================
-    // INTERNAL: CHECK SELLER ROLE
-    // =========================
-    private void validateSeller(UUID userId) {
-        String url = userServiceBaseUrl + "/users/" + userId + "/role";
-
-        UserRoleResponse response;
-
-        try {
-            response = restTemplate.getForObject(url, UserRoleResponse.class);
-        } catch (HttpClientErrorException.NotFound e) {
-            throw new IllegalArgumentException("User not found");
-        } catch (HttpClientErrorException.Forbidden e) {
-            throw new IllegalArgumentException("Access denied by user-service");
-        } catch (ResourceAccessException e) {
-            throw new IllegalStateException("User service unavailable at " + url);
-        } catch (Exception e) {
-            throw new IllegalStateException("Error communicating with user-service: " + e.getMessage());
+    @Transactional
+    public void increaseStock(UUID productId, int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than 0");
         }
 
-        if (response == null || response.getRole() == null) {
-            throw new IllegalStateException("Invalid response from user-service");
+        int updatedRows = repository.increaseStock(productId, quantity);
+        if (updatedRows == 0) {
+            throw new IllegalArgumentException("Product not found");
+        }
+    }
+
+    private void validateCreatorRole(String userRole) {
+        if (userRole == null || userRole.isBlank()) {
+            throw new SecurityException("Missing user role");
         }
 
-        if (!"SELLER".equals(response.getRole())) {
-            throw new SecurityException("Only SELLER can create product");
+        if (!"SELLER".equalsIgnoreCase(userRole) && !"ADMIN".equalsIgnoreCase(userRole)) {
+            throw new SecurityException("Only SELLER or ADMIN can create product");
         }
     }
 

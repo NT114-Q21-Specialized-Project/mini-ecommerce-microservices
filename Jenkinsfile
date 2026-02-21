@@ -55,6 +55,7 @@ pipeline {
                     env.BUILD_PRODUCT      = changedFiles.any { it.startsWith("product-service/") } ? "true" : "false"
                     env.BUILD_ORDER        = changedFiles.any { it.startsWith("order-service/") } ? "true" : "false"
                     env.BUILD_FRONTEND     = changedFiles.any { it.startsWith("front-end/") } ? "true" : "false"
+                    env.BUILD_CONTRACTS    = changedFiles.any { it.startsWith("api-contracts/") } ? "true" : "false"
 
                     // If Jenkinsfile is changed → force rebuild ALL services
                     if (isCiChange) {
@@ -64,6 +65,7 @@ pipeline {
                         env.BUILD_PRODUCT      = "true"
                         env.BUILD_ORDER        = "true"
                         env.BUILD_FRONTEND     = "true"
+                        env.BUILD_CONTRACTS    = "true"
                     }
 
                     echo """
@@ -74,9 +76,43 @@ pipeline {
         product       : ${env.BUILD_PRODUCT}
         order         : ${env.BUILD_ORDER}
         front-end     : ${env.BUILD_FRONTEND}
+        contracts     : ${env.BUILD_CONTRACTS}
         =================================================
         """
                 }
+            }
+        }
+
+        stage('Contract Validation') {
+            when {
+                expression {
+                    env.BUILD_CONTRACTS    == "true" ||
+                    env.BUILD_API_GATEWAY  == "true" ||
+                    env.BUILD_USER_SERVICE == "true" ||
+                    env.BUILD_PRODUCT      == "true" ||
+                    env.BUILD_ORDER        == "true" ||
+                    env.BUILD_FRONTEND     == "true"
+                }
+            }
+            steps {
+                sh '''
+                  set -e
+
+                  if [ ! -d "api-contracts" ]; then
+                    echo "api-contracts directory not found"
+                    exit 1
+                  fi
+
+                  for spec in api-contracts/*.openapi.yaml; do
+                    [ -f "$spec" ] || continue
+                    echo "Validating contract: $spec"
+                    docker run --rm \
+                      -v "$PWD:/work" \
+                      -w /work \
+                      node:20-alpine \
+                      sh -c "npx --yes @apidevtools/swagger-cli@4.0.4 validate $spec"
+                  done
+                '''
             }
         }
 

@@ -14,8 +14,6 @@ spring:
     open-in-view: false
 
 clients:
-  user-service:
-    base-url: ${USER_SERVICE_BASE_URL:http://user-service:8080}
   product-service:
     base-url: ${PRODUCT_SERVICE_BASE_URL:http://product-service:8080}
   http:

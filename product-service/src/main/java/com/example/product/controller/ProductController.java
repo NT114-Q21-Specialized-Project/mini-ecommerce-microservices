@@ -26,6 +26,7 @@ public class ProductController {
     @PostMapping
     public ResponseEntity<?> create(
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleHeader,
             @RequestBody Product product
     ) {
         // Kiểm tra nếu thiếu Header
@@ -35,11 +36,9 @@ public class ProductController {
                     .body("Missing X-User-Id header");
         }
 
-        UUID userId;
-
         // 1️⃣ Validate header
         try {
-            userId = UUID.fromString(userIdHeader);
+            UUID.fromString(userIdHeader);
         } catch (IllegalArgumentException e) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
@@ -48,7 +47,7 @@ public class ProductController {
 
         // 2️⃣ Business + infra handling
         try {
-            Product created = service.create(product, userId);
+            Product created = service.create(product, userRoleHeader);
             return ResponseEntity
                     .status(HttpStatus.CREATED)
                     .body(created);
@@ -64,7 +63,7 @@ public class ProductController {
                     .body(e.getMessage());
 
         } catch (IllegalStateException e) {
-            // Infra error: user-service unavailable
+            // Infra error: unexpected downstream dependency issue
             return ResponseEntity
                     .status(HttpStatus.BAD_GATEWAY)
                     .body(e.getMessage());
@@ -96,12 +95,41 @@ public class ProductController {
     @PostMapping("/{id}/decrease-stock")
     public ResponseEntity<?> decreaseStock(
             @PathVariable UUID id,
+            @RequestHeader(value = "X-Internal-Caller", required = false) String caller,
             @RequestParam int quantity
     ) {
+        if (!"order-service".equalsIgnoreCase(caller)) {
+            return ResponseEntity
+                    .status(HttpStatus.FORBIDDEN)
+                    .body("Forbidden internal endpoint");
+        }
+
         try {
             service.checkAndDecreaseStock(id, quantity);
             return ResponseEntity.ok().build();
 
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/increase-stock")
+    public ResponseEntity<?> increaseStock(
+            @PathVariable UUID id,
+            @RequestHeader(value = "X-Internal-Caller", required = false) String caller,
+            @RequestParam int quantity
+    ) {
+        if (!"order-service".equalsIgnoreCase(caller)) {
+            return ResponseEntity
+                    .status(HttpStatus.FORBIDDEN)
+                    .body("Forbidden internal endpoint");
+        }
+
+        try {
+            service.increaseStock(id, quantity);
+            return ResponseEntity.ok().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)

@@ -101,3 +101,8 @@ management:
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://tempo:4317}
+
+security:
+  jwt:
+    enabled: ${SECURITY_JWT_ENABLED:true}
+    secret: ${SECURITY_JWT_SECRET:mini-ecommerce-super-secret-change-me-please}

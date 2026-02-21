@@ -1,25 +1,63 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ShoppingCart } from 'lucide-react';
 
 const ProductCard = ({ product, onBuy, loading, userRole }) => {
+  const [quantity, setQuantity] = useState(1);
+
+  const canBuy = userRole === 'CUSTOMER' || userRole === 'ADMIN';
+  const outOfStock = product.stock <= 0;
+  const disabled = loading || !canBuy || outOfStock;
+
+  const handleBuy = () => {
+    onBuy(product.id, quantity);
+  };
+
   return (
-    <div className="group p-5 border border-gray-100 rounded-2xl hover:shadow-xl transition-all bg-white relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-1 h-full bg-orange-400 group-hover:w-2 transition-all"></div>
-      <h3 className="font-extrabold text-gray-900 text-lg group-hover:text-orange-600 transition-colors">{product.name}</h3>
-      <p className="text-2xl font-black text-indigo-600 mt-1">${product.price}</p>
-      <div className="mt-4 flex items-center justify-between">
-        <span className="text-sm font-bold text-gray-400">Tồn kho: {product.stock}</span>
-        <button 
-          disabled={product.stock <= 0 || loading || userRole === 'ADMIN'}
-          onClick={() => onBuy(product.id, product.price)}
-          className={`flex items-center px-6 py-2 rounded-xl text-white font-bold transition-all ${
-            product.stock > 0 && userRole !== 'ADMIN' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'
+    <article className="group rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <h3 className="text-base font-semibold text-slate-900">{product.name}</h3>
+        <span
+          className={`rounded-full px-2 py-1 text-xs font-semibold ${
+            outOfStock ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
           }`}
         >
-          <ShoppingCart size={18} className="mr-2" /> Mua
+          {outOfStock ? 'Hết hàng' : `Kho: ${product.stock}`}
+        </span>
+      </div>
+
+      <p className="text-2xl font-extrabold text-slate-900">${Number(product.price || 0).toFixed(2)}</p>
+
+      <div className="mt-4 flex items-center gap-2">
+        <input
+          type="number"
+          min="1"
+          max={Math.max(product.stock || 1, 1)}
+          value={quantity}
+          onChange={(e) => {
+            const nextValue = Number(e.target.value);
+            if (Number.isNaN(nextValue)) {
+              return;
+            }
+            setQuantity(Math.min(Math.max(1, nextValue), Math.max(product.stock || 1, 1)));
+          }}
+          className="w-20 rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200"
+          disabled={!canBuy || outOfStock}
+        />
+        <button
+          type="button"
+          onClick={handleBuy}
+          disabled={disabled}
+          className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            disabled
+              ? 'cursor-not-allowed bg-slate-200 text-slate-500'
+              : 'bg-cyan-600 text-white hover:bg-cyan-700'
+          }`}
+        >
+          <ShoppingCart className="h-4 w-4" />
+          Mua ngay
         </button>
       </div>
-    </div>
+    </article>
   );
 };
 

@@ -1,48 +1,55 @@
 import React from 'react';
-import { Package, RefreshCcw, Plus } from 'lucide-react';
+import { Package2, Plus, RotateCw } from 'lucide-react';
 import ProductCard from './ProductCard';
 
 const ProductList = ({ products, onRefresh, onBuy, loading, currentUser, onOpenAddModal }) => {
+  const canCreateProduct = currentUser?.role === 'SELLER' || currentUser?.role === 'ADMIN';
+
   return (
-    <section className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold flex items-center">
-          <Package className="text-orange-500 mr-2" /> Cửa hàng sản phẩm
+    <section className="glass-panel rounded-3xl border p-5 md:p-6">
+      <div className="mb-5 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 md:text-xl">
+          <Package2 className="h-5 w-5 text-cyan-600" />
+          Product Catalog
         </h2>
-        <div className="flex gap-2">
-          <button 
-            onClick={onRefresh} 
-            className="text-gray-400 hover:text-orange-500 p-2 transition-colors"
-            title="Làm mới danh sách"
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="inline-flex items-center gap-1 rounded-xl border border-cyan-200 px-3 py-2 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50"
+            title="Làm mới danh sách sản phẩm"
           >
-            <RefreshCcw size={18} />
+            <RotateCw className="h-4 w-4" />
+            Refresh
           </button>
-          
-          {currentUser?.role === 'SELLER' && (
-            <button 
-              onClick={onOpenAddModal} // Gọi hàm mở Modal từ App.jsx
-              className="bg-orange-500 text-white px-4 py-2 rounded-xl flex items-center text-sm font-bold hover:bg-orange-600 transition-all active:scale-95 shadow-md shadow-orange-100"
+
+          {canCreateProduct && (
+            <button
+              type="button"
+              onClick={onOpenAddModal}
+              className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700"
             >
-              <Plus size={18} className="mr-1" /> Đăng SP
+              <Plus className="h-4 w-4" />
+              Đăng sản phẩm
             </button>
           )}
         </div>
       </div>
-      
+
       {products.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
-          <Package size={48} className="mx-auto mb-4 opacity-20" />
-          <p>Chưa có sản phẩm nào được đăng bán.</p>
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-8 text-center text-sm text-slate-500">
+          Chưa có sản phẩm nào trong hệ thống.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {products.map(p => (
-            <ProductCard 
-              key={p.id} 
-              product={p} 
-              onBuy={onBuy} 
-              loading={loading} 
-              userRole={currentUser?.role} 
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              onBuy={onBuy}
+              loading={loading}
+              userRole={currentUser?.role}
             />
           ))}
         </div>

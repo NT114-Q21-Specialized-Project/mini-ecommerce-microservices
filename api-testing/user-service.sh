@@ -67,12 +67,16 @@ echo
 # 4. LOGIN (AUTH DEMO)
 # =========================
 echo "4️⃣ Login CUSTOMER"
-curl -s -X POST $GATEWAY/api/users/login \
+CUSTOMER_LOGIN_JSON=$(curl -s -X POST $GATEWAY/api/users/login \
   -H "Content-Type: application/json" \
   -d "{
     \"email\": \"$CUSTOMER_EMAIL\",
     \"password\": \"$PASSWORD\"
-  }" | jq
+  }")
+
+echo "$CUSTOMER_LOGIN_JSON" | jq
+CUSTOMER_TOKEN=$(echo "$CUSTOMER_LOGIN_JSON" | jq -r '.access_token')
+echo "CUSTOMER_TOKEN=$CUSTOMER_TOKEN"
 echo
 
 # =========================

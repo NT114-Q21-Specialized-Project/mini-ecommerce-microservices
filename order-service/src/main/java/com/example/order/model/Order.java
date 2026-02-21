@@ -1,34 +1,60 @@
 package com.example.order.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "orders")
+@Table(
+        name = "orders",
+        indexes = {
+                @Index(name = "idx_orders_user_id_created_at", columnList = "user_id, created_at"),
+                @Index(name = "idx_orders_idempotency_key", columnList = "idempotency_key")
+        }
+)
 public class Order {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(nullable = false)
+    @Column(name = "product_id", nullable = false)
     private UUID productId;
 
     @Column(nullable = false)
     private Integer quantity;
 
-    @Column(nullable = false)
+    @Column(name = "unit_price")
+    private Double unitPrice;
+
+    @Column(name = "total_amount", nullable = false)
     private Double totalAmount;
 
     @Column(nullable = false)
     private String status;
 
-    @Column(nullable = false)
-    private Instant createdAt = Instant.now();
+    @Column(name = "created_at", nullable = false)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Instant createdAt;
+
+    @Column(name = "cancelled_at")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Instant cancelledAt;
+
+    @Column(name = "idempotency_key", unique = true, length = 128)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String idempotencyKey;
+
+    @PrePersist
+    public void prePersist() {
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
+    }
 
     public UUID getId() {
         return id;
@@ -62,6 +88,14 @@ public class Order {
         return totalAmount;
     }
 
+    public Double getUnitPrice() {
+        return unitPrice;
+    }
+
+    public void setUnitPrice(Double unitPrice) {
+        this.unitPrice = unitPrice;
+    }
+
     public void setTotalAmount(Double totalAmount) {
         this.totalAmount = totalAmount;
     }
@@ -76,5 +110,21 @@ public class Order {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public void setCancelledAt(Instant cancelledAt) {
+        this.cancelledAt = cancelledAt;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
     }
 }

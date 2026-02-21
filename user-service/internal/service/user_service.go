@@ -2,7 +2,9 @@ package service
 
 import (
 	"errors"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"user-service/internal/model"
@@ -10,11 +12,21 @@ import (
 )
 
 type UserService struct {
-	repo *repository.UserRepository
+	repo      *repository.UserRepository
+	jwtSecret []byte
+	jwtTTL    time.Duration
 }
 
-func NewUserService(repo *repository.UserRepository) *UserService {
-	return &UserService{repo: repo}
+func NewUserService(repo *repository.UserRepository, jwtSecret string, jwtTTL time.Duration) *UserService {
+	if jwtTTL <= 0 {
+		jwtTTL = 2 * time.Hour
+	}
+
+	return &UserService{
+		repo:      repo,
+		jwtSecret: []byte(jwtSecret),
+		jwtTTL:    jwtTTL,
+	}
 }
 
 func (s *UserService) GetUsers() ([]model.User, error) {
@@ -47,19 +59,24 @@ func (s *UserService) CreateUser(user *model.User) error {
 // =========================
 // LOGIN LOGIC
 // =========================
-func (s *UserService) Login(email, password string) (*model.User, error) {
+func (s *UserService) Login(email, password string) (*model.User, string, int64, error) {
 	user, err := s.repo.FindByEmail(email)
 	if err != nil || user == nil {
-		return nil, errors.New("invalid email or password")
+		return nil, "", 0, errors.New("invalid email or password")
 	}
 
 	// So sánh mật khẩu hash
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return nil, errors.New("invalid email or password")
+		return nil, "", 0, errors.New("invalid email or password")
 	}
 
-	return user, nil
+	accessToken, expiresAt, err := s.generateAccessToken(user)
+	if err != nil {
+		return nil, "", 0, err
+	}
+
+	return user, accessToken, expiresAt.Unix(), nil
 }
 
 func (s *UserService) GetUserByID(id string) (*model.User, error) {
@@ -140,4 +157,30 @@ func (s *UserService) UserStats() (map[string]any, error) {
 // =========================
 func (s *UserService) ValidateUser(id string) (bool, string, bool, error) {
 	return s.repo.ValidateUser(id)
+}
+
+func (s *UserService) generateAccessToken(user *model.User) (string, time.Time, error) {
+	if len(s.jwtSecret) == 0 {
+		return "", time.Time{}, errors.New("jwt secret is empty")
+	}
+
+	now := time.Now().UTC()
+	expiresAt := now.Add(s.jwtTTL)
+
+	claims := jwt.MapClaims{
+		"sub":   user.ID,
+		"email": user.Email,
+		"name":  user.Name,
+		"role":  user.Role,
+		"iat":   now.Unix(),
+		"exp":   expiresAt.Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString(s.jwtSecret)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return signedToken, expiresAt, nil
 }

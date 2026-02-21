@@ -35,6 +35,8 @@ services:
       DB_NAME: user_db
       DB_USER: user
       DB_PASSWORD: userpass
+      JWT_SECRET: mini-ecommerce-super-secret-change-me-please
+      JWT_EXPIRES_MINUTES: 120
 
       # ===== OpenTelemetry =====
       OTEL_SERVICE_NAME: user-service
@@ -77,9 +79,6 @@ services:
       DB_URL: jdbc:postgresql://product-db:5432/product_db
       DB_USER: product
       DB_PASSWORD: productpass
-      USER_SERVICE_BASE_URL: http://user-service:8080
-      HTTP_CONNECT_TIMEOUT_MS: 2000
-      HTTP_READ_TIMEOUT_MS: 5000
 
       OTEL_SERVICE_NAME: product-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -121,7 +120,6 @@ services:
       DB_URL: jdbc:postgresql://order-db:5432/order_db
       DB_USER: order
       DB_PASSWORD: orderpass
-      USER_SERVICE_BASE_URL: http://user-service:8080
       PRODUCT_SERVICE_BASE_URL: http://product-service:8080
       HTTP_CONNECT_TIMEOUT_MS: 2000
       HTTP_READ_TIMEOUT_MS: 5000
@@ -134,8 +132,6 @@ services:
     depends_on:
       order-db:
         condition: service_healthy
-      user-service:
-        condition: service_started
       product-service:
         condition: service_started
     restart: unless-stopped
@@ -151,6 +147,8 @@ services:
       PRODUCT_SERVICE_URL: http://product-service:8080
       ORDER_SERVICE_URL: http://order-service:8080
       GATEWAY_ALLOWED_ORIGIN_PATTERN: http://localhost:5173
+      SECURITY_JWT_ENABLED: "true"
+      SECURITY_JWT_SECRET: mini-ecommerce-super-secret-change-me-please
 
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
