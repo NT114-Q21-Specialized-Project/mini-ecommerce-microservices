@@ -1,9 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Xóa bảng nếu tồn tại để tránh lỗi khi init lại
-DROP TABLE IF EXISTS users;
-
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,

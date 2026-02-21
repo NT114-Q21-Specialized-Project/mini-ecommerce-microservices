@@ -4,6 +4,7 @@ import com.example.product.dto.UserRoleResponse;
 import com.example.product.model.Product;
 import com.example.product.repository.ProductRepository;
 import jakarta.transaction.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
@@ -17,16 +18,23 @@ public class ProductService {
 
     private final ProductRepository repository;
     private final RestTemplate restTemplate;
+    private final String userServiceBaseUrl;
 
-    public ProductService(ProductRepository repository, RestTemplate restTemplate) {
+    public ProductService(
+            ProductRepository repository,
+            RestTemplate restTemplate,
+            @Value("${clients.user-service.base-url}") String userServiceBaseUrl
+    ) {
         this.repository = repository;
         this.restTemplate = restTemplate;
+        this.userServiceBaseUrl = userServiceBaseUrl.replaceAll("/+$", "");
     }
 
     // =========================
     // CREATE PRODUCT (SELLER ONLY)
     // =========================
     public Product create(Product product, UUID userId) {
+        validateProductInput(product);
         validateSeller(userId);
         return repository.save(product);
     }
@@ -48,6 +56,10 @@ public class ProductService {
     // =========================
     @Transactional
     public void checkAndDecreaseStock(UUID productId, int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than 0");
+        }
+
         int updatedRows = repository.decreaseStock(productId, quantity);
         if (updatedRows == 0) {
             throw new IllegalArgumentException("Product not found or insufficient stock");
@@ -58,8 +70,7 @@ public class ProductService {
     // INTERNAL: CHECK SELLER ROLE
     // =========================
     private void validateSeller(UUID userId) {
-        // user-service là tên container trong docker-compose
-        String url = "http://user-service:8080/users/" + userId + "/role";
+        String url = userServiceBaseUrl + "/users/" + userId + "/role";
 
         UserRoleResponse response;
 
@@ -80,7 +91,27 @@ public class ProductService {
         }
 
         if (!"SELLER".equals(response.getRole())) {
-            throw new IllegalArgumentException("Only SELLER can create product");
+            throw new SecurityException("Only SELLER can create product");
         }
+    }
+
+    private void validateProductInput(Product product) {
+        if (product == null) {
+            throw new IllegalArgumentException("Product payload is required");
+        }
+
+        if (product.getName() == null || product.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Product name is required");
+        }
+
+        if (product.getPrice() == null || product.getPrice() <= 0) {
+            throw new IllegalArgumentException("Product price must be greater than 0");
+        }
+
+        if (product.getStock() == null || product.getStock() < 0) {
+            throw new IllegalArgumentException("Product stock must be greater than or equal to 0");
+        }
+
+        product.setName(product.getName().trim());
     }
 }

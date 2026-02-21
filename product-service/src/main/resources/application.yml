@@ -1,20 +1,52 @@
-server:
-  port: 8080
-
 spring:
+  application:
+    name: product-service
+
   datasource:
-    url: jdbc:postgresql://product-db:5432/product_db
-    username: product
-    password: productpass
+    url: ${DB_URL:jdbc:postgresql://product-db:5432/product_db}
+    username: ${DB_USER:product}
+    password: ${DB_PASSWORD:productpass}
     driver-class-name: org.postgresql.Driver
+
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:true}
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
+server:
+  port: ${SERVER_PORT:8080}
+
+clients:
+  user-service:
+    base-url: ${USER_SERVICE_BASE_URL:http://user-service:8080}
+  http:
+    connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${HTTP_READ_TIMEOUT_MS:5000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://tempo:4317}
 
 logging:
   level:

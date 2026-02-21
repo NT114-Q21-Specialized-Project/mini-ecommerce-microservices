@@ -74,6 +74,13 @@ services:
     build: ./product-service
     container_name: product-service
     environment:
+      DB_URL: jdbc:postgresql://product-db:5432/product_db
+      DB_USER: product
+      DB_PASSWORD: productpass
+      USER_SERVICE_BASE_URL: http://user-service:8080
+      HTTP_CONNECT_TIMEOUT_MS: 2000
+      HTTP_READ_TIMEOUT_MS: 5000
+
       OTEL_SERVICE_NAME: product-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
       OTEL_TRACES_EXPORTER: otlp
@@ -111,6 +118,14 @@ services:
     build: ./order-service
     container_name: order-service
     environment:
+      DB_URL: jdbc:postgresql://order-db:5432/order_db
+      DB_USER: order
+      DB_PASSWORD: orderpass
+      USER_SERVICE_BASE_URL: http://user-service:8080
+      PRODUCT_SERVICE_BASE_URL: http://product-service:8080
+      HTTP_CONNECT_TIMEOUT_MS: 2000
+      HTTP_READ_TIMEOUT_MS: 5000
+
       OTEL_SERVICE_NAME: order-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
       OTEL_TRACES_EXPORTER: otlp
@@ -132,6 +147,11 @@ services:
     build: ./api-gateway
     container_name: api-gateway
     environment:
+      USER_SERVICE_URL: http://user-service:8080
+      PRODUCT_SERVICE_URL: http://product-service:8080
+      ORDER_SERVICE_URL: http://order-service:8080
+      GATEWAY_ALLOWED_ORIGIN_PATTERN: http://localhost:5173
+
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
       OTEL_TRACES_EXPORTER: otlp

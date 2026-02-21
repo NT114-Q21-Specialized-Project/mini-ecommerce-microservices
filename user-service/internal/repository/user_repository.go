@@ -207,7 +207,7 @@ func (r *UserRepository) Exists(id string) (bool, error) {
         SELECT EXISTS (
             SELECT 1 FROM users WHERE id = $1 AND is_active = true
         )
-    `).Scan(&exists)
+    `, id).Scan(&exists)
 
 	return exists, err
 }
@@ -331,7 +331,6 @@ func (r *UserRepository) Stats() (map[string]any, error) {
 	stats["by_role"] = roleStats
 	return stats, nil
 }
-
 
 // =========================
 // VALIDATE USER (INTERNAL)

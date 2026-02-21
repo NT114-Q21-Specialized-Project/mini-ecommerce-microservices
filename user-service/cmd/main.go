@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -21,11 +23,30 @@ import (
 	"user-service/internal/service"
 )
 
+func getEnv(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func normalizeOTLPEndpoint(raw string) string {
+	value := strings.TrimSpace(raw)
+	value = strings.TrimPrefix(value, "http://")
+	value = strings.TrimPrefix(value, "https://")
+	return strings.TrimSuffix(value, "/")
+}
+
 func initTracer() func() {
 	ctx := context.Background()
+	otelEndpoint := normalizeOTLPEndpoint(
+		getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "tempo:4317"),
+	)
+	serviceName := getEnv("OTEL_SERVICE_NAME", "user-service")
 
 	exporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint("tempo:4317"),
+		otlptracegrpc.WithEndpoint(otelEndpoint),
 		otlptracegrpc.WithInsecure(),
 	)
 	if err != nil {
@@ -34,7 +55,7 @@ func initTracer() func() {
 
 	res := resource.NewWithAttributes(
 		semconv.SchemaURL,
-		semconv.ServiceName("user-service"),
+		semconv.ServiceName(serviceName),
 	)
 
 	tp := sdktrace.NewTracerProvider(
@@ -119,6 +140,7 @@ func main() {
 	// =========================
 	r.HandleFunc("/users/{id}/exists", h.UserExists).Methods("GET")
 	r.HandleFunc("/users/{id}/role", h.GetUserRole).Methods("GET")
+	r.HandleFunc("/users/{id}/validate", h.ValidateUser).Methods("GET")
 
 	r.HandleFunc("/internal/users/{id}/validate", h.ValidateUser).Methods("GET")
 

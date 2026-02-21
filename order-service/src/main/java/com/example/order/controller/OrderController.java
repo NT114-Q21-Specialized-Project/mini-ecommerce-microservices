@@ -42,6 +42,11 @@ public class OrderController {
                     .status(HttpStatus.BAD_REQUEST)
                     .body(e.getMessage());
 
+        } catch (IllegalStateException e) {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_GATEWAY)
+                    .body(e.getMessage());
+
         } catch (Exception e) {
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)

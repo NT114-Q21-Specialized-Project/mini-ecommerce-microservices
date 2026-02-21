@@ -1,4 +1,4 @@
-package com.example.product.config;
+package com.example.order.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;

@@ -1,9 +1,9 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   application:
-    name: api-gateway
+    name: ${SPRING_APPLICATION_NAME:api-gateway}
 
   cloud:
     gateway:
@@ -16,7 +16,7 @@ spring:
           '[/**]':
             # ⚠️ BẮT BUỘC dùng allowedOriginPatterns khi allowCredentials = true
             allowedOriginPatterns:
-              - "http://localhost:5173"
+              - ${GATEWAY_ALLOWED_ORIGIN_PATTERN:http://localhost:5173}
             allowedMethods:
               - GET
               - POST
@@ -37,7 +37,7 @@ spring:
         # (Bổ sung để tránh lỗi UUID khi gọi /api/users/health)
         # ======================
         - id: user-service-health
-          uri: http://user-service:8080
+          uri: ${USER_SERVICE_URL:http://user-service:8080}
           predicates:
             - Path=/api/users/health
           filters:
@@ -49,7 +49,7 @@ spring:
         # Chuyển:   http://user-service:8080/users
         # ======================
         - id: user-service
-          uri: http://user-service:8080
+          uri: ${USER_SERVICE_URL:http://user-service:8080}
           predicates:
             - Path=/api/users/**, /api/users
           filters:
@@ -61,7 +61,7 @@ spring:
         # Chuyển:   http://product-service:8080/products
         # ======================
         - id: product-service
-          uri: http://product-service:8080
+          uri: ${PRODUCT_SERVICE_URL:http://product-service:8080}
           predicates:
             - Path=/api/products/**, /api/products
           filters:
@@ -73,7 +73,7 @@ spring:
         # Chuyển:   http://order-service:8080/orders
         # ======================
         - id: order-service
-          uri: http://order-service:8080
+          uri: ${ORDER_SERVICE_URL:http://order-service:8080}
           predicates:
             - Path=/api/orders/**, /api/orders
           filters:
@@ -84,8 +84,20 @@ management:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
 
   tracing:
     enabled: true
     sampling:
       probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://tempo:4317}

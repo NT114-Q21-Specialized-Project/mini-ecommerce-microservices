@@ -53,10 +53,14 @@ public class ProductController {
                     .status(HttpStatus.CREATED)
                     .body(created);
 
-        } catch (IllegalArgumentException e) {
-            // Business error: role invalid / user not found
+        } catch (SecurityException e) {
             return ResponseEntity
                     .status(HttpStatus.FORBIDDEN)
+                    .body(e.getMessage());
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
                     .body(e.getMessage());
 
         } catch (IllegalStateException e) {

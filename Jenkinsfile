@@ -82,6 +82,88 @@ pipeline {
 
 
         /* =========================
+           TEST CHANGED SERVICES
+        ========================= */
+        stage('Test Services') {
+            when {
+                expression {
+                    env.BUILD_API_GATEWAY  == "true" ||
+                    env.BUILD_USER_SERVICE == "true" ||
+                    env.BUILD_PRODUCT      == "true" ||
+                    env.BUILD_ORDER        == "true" ||
+                    env.BUILD_FRONTEND     == "true"
+                }
+            }
+            parallel {
+                stage('Test api-gateway') {
+                    when { environment name: 'BUILD_API_GATEWAY', value: 'true' }
+                    steps {
+                        sh '''
+                          docker run --rm \
+                            -v "$PWD/api-gateway:/app" \
+                            -w /app \
+                            maven:3.9.6-eclipse-temurin-17 \
+                            mvn -B test
+                        '''
+                    }
+                }
+
+                stage('Test user-service') {
+                    when { environment name: 'BUILD_USER_SERVICE', value: 'true' }
+                    steps {
+                        sh '''
+                          docker run --rm \
+                            -v "$PWD/user-service:/app" \
+                            -w /app \
+                            golang:1.24-alpine \
+                            sh -c "go test ./..."
+                        '''
+                    }
+                }
+
+                stage('Test product-service') {
+                    when { environment name: 'BUILD_PRODUCT', value: 'true' }
+                    steps {
+                        sh '''
+                          docker run --rm \
+                            -v "$PWD/product-service:/app" \
+                            -w /app \
+                            maven:3.9.6-eclipse-temurin-17 \
+                            mvn -B test
+                        '''
+                    }
+                }
+
+                stage('Test order-service') {
+                    when { environment name: 'BUILD_ORDER', value: 'true' }
+                    steps {
+                        sh '''
+                          docker run --rm \
+                            -v "$PWD/order-service:/app" \
+                            -w /app \
+                            maven:3.9.6-eclipse-temurin-17 \
+                            mvn -B test
+                        '''
+                    }
+                }
+
+                stage('Test frontend') {
+                    when { environment name: 'BUILD_FRONTEND', value: 'true' }
+                    steps {
+                        sh '''
+                          docker run --rm \
+                            -v "$PWD/front-end:/app" \
+                            -w /app \
+                            node:20-alpine \
+                            sh -c "npm ci && npm run build"
+                        '''
+                    }
+                }
+            }
+        }
+
+
+        /* =========================
            BUILD IMAGES
         ========================= */
         stage('Build Images') {
