@@ -1,184 +1,125 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-# =========================
-# GLOBAL CONFIG
-# =========================
-GATEWAY=http://localhost:9000
-
-# Generate unique suffix (avoid duplicate data)
-SUFFIX=$(date +%s)
-
-CUSTOMER_NAME="Customer API $SUFFIX"
-SELLER_NAME="Seller API $SUFFIX"
-
-CUSTOMER_EMAIL="customer_$SUFFIX@test.com"
-SELLER_EMAIL="seller_$SUFFIX@test.com"
-
+BASE_URL="${BASE_URL:-http://localhost:9000}"
+SUFFIX="$(date +%s)"
 PASSWORD="123456"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
-echo "====================================="
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || { echo "[FAIL] Missing command: $1"; exit 1; }
+}
+
+request() {
+  local method="$1"
+  local path="$2"
+  local body_file="$3"
+  shift 3
+  local extra_args=("$@")
+
+  curl -sS -o "$body_file" -w "%{http_code}" -X "$method" "$BASE_URL$path" "${extra_args[@]}"
+}
+
+assert_code() {
+  local actual="$1"
+  local expected="$2"
+  local label="$3"
+  local body_file="$4"
+
+  if [[ "$actual" != "$expected" ]]; then
+    echo "[FAIL] $label (expected=$expected actual=$actual)"
+    echo "-- response --"
+    cat "$body_file" || true
+    exit 1
+  fi
+  echo "[PASS] $label ($actual)"
+}
+
+require_cmd curl
+require_cmd jq
+
 echo "===== USER SERVICE API TEST ====="
-echo "SUFFIX = $SUFFIX"
-echo "====================================="
-echo
+echo "BASE_URL=$BASE_URL"
+echo "SUFFIX=$SUFFIX"
 
-# =========================
-# 1. HEALTH CHECK
-# =========================
-echo "1️⃣ Health check"
-curl -s $GATEWAY/api/users/health
-echo
-echo
+CUSTOMER_EMAIL="customer_${SUFFIX}@test.com"
+SELLER_EMAIL="seller_${SUFFIX}@test.com"
+ADMIN_EMAIL="admin_${SUFFIX}@test.com"
 
-# =========================
-# 2. CREATE CUSTOMER
-# =========================
-echo "2️⃣ Create CUSTOMER user"
-CUSTOMER_ID=$(curl -s -X POST $GATEWAY/api/users \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"name\": \"$CUSTOMER_NAME\",
-    \"email\": \"$CUSTOMER_EMAIL\",
-    \"password\": \"$PASSWORD\",
-    \"role\": \"CUSTOMER\"
-  }" | jq -r '.id')
+code=$(request GET "/api/users/health" "$TMP_DIR/health.out")
+assert_code "$code" "200" "health check" "$TMP_DIR/health.out"
 
+code=$(request POST "/api/users" "$TMP_DIR/customer_create.out" \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Customer ${SUFFIX}\",\"email\":\"$CUSTOMER_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"CUSTOMER\"}")
+assert_code "$code" "201" "create customer" "$TMP_DIR/customer_create.out"
+CUSTOMER_ID="$(jq -r '.id' "$TMP_DIR/customer_create.out")"
+
+code=$(request POST "/api/users" "$TMP_DIR/seller_create.out" \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Seller ${SUFFIX}\",\"email\":\"$SELLER_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"SELLER\"}")
+assert_code "$code" "201" "create seller" "$TMP_DIR/seller_create.out"
+SELLER_ID="$(jq -r '.id' "$TMP_DIR/seller_create.out")"
+
+code=$(request POST "/api/users" "$TMP_DIR/admin_create.out" \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Admin ${SUFFIX}\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"ADMIN\"}")
+assert_code "$code" "201" "create admin" "$TMP_DIR/admin_create.out"
+ADMIN_ID="$(jq -r '.id' "$TMP_DIR/admin_create.out")"
+
+code=$(request POST "/api/users/login" "$TMP_DIR/admin_login.out" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\"}")
+assert_code "$code" "200" "login admin" "$TMP_DIR/admin_login.out"
+ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_login.out")"
+
+AUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
+
+code=$(request GET "/api/users" "$TMP_DIR/users_list_1.out" "${AUTH[@]}")
+assert_code "$code" "200" "list users" "$TMP_DIR/users_list_1.out"
+
+code=$(request GET "/api/users/$CUSTOMER_ID" "$TMP_DIR/user_by_id.out" "${AUTH[@]}")
+assert_code "$code" "200" "get user by id" "$TMP_DIR/user_by_id.out"
+
+code=$(request GET "/api/users/by-email?email=$CUSTOMER_EMAIL" "$TMP_DIR/user_by_email.out" "${AUTH[@]}")
+assert_code "$code" "200" "get user by email" "$TMP_DIR/user_by_email.out"
+
+code=$(request GET "/api/users/email-exists?email=$CUSTOMER_EMAIL" "$TMP_DIR/email_exists.out" "${AUTH[@]}")
+assert_code "$code" "200" "check email exists" "$TMP_DIR/email_exists.out"
+
+code=$(request PUT "/api/users/$CUSTOMER_ID" "$TMP_DIR/user_update.out" \
+  -H 'Content-Type: application/json' \
+  "${AUTH[@]}" \
+  -d "{\"name\":\"Customer ${SUFFIX} Updated\"}")
+assert_code "$code" "204" "update user" "$TMP_DIR/user_update.out"
+
+code=$(request GET "/api/users/$CUSTOMER_ID/exists" "$TMP_DIR/user_exists.out" "${AUTH[@]}")
+assert_code "$code" "200" "internal exists" "$TMP_DIR/user_exists.out"
+
+code=$(request GET "/api/users/$SELLER_ID/role" "$TMP_DIR/user_role.out" "${AUTH[@]}")
+assert_code "$code" "200" "internal role" "$TMP_DIR/user_role.out"
+
+code=$(request GET "/api/users/$CUSTOMER_ID/validate" "$TMP_DIR/user_validate.out" "${AUTH[@]}")
+assert_code "$code" "200" "internal validate" "$TMP_DIR/user_validate.out"
+
+code=$(request PATCH "/api/users/$CUSTOMER_ID/deactivate" "$TMP_DIR/user_deactivate.out" "${AUTH[@]}")
+assert_code "$code" "204" "deactivate user" "$TMP_DIR/user_deactivate.out"
+
+code=$(request PATCH "/api/users/$CUSTOMER_ID/activate" "$TMP_DIR/user_activate.out" "${AUTH[@]}")
+assert_code "$code" "204" "activate user" "$TMP_DIR/user_activate.out"
+
+code=$(request GET "/api/users/stats" "$TMP_DIR/user_stats.out" "${AUTH[@]}")
+assert_code "$code" "200" "user stats" "$TMP_DIR/user_stats.out"
+
+code=$(request DELETE "/api/users/$CUSTOMER_ID" "$TMP_DIR/user_delete.out" "${AUTH[@]}")
+assert_code "$code" "204" "soft delete user" "$TMP_DIR/user_delete.out"
+
+code=$(request GET "/api/users" "$TMP_DIR/users_list_2.out" "${AUTH[@]}")
+assert_code "$code" "200" "list users after delete" "$TMP_DIR/users_list_2.out"
+
+echo "----- SUMMARY -----"
 echo "CUSTOMER_ID=$CUSTOMER_ID"
-echo
-
-# =========================
-# 3. CREATE SELLER
-# =========================
-echo "3️⃣ Create SELLER user"
-SELLER_ID=$(curl -s -X POST $GATEWAY/api/users \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"name\": \"$SELLER_NAME\",
-    \"email\": \"$SELLER_EMAIL\",
-    \"password\": \"$PASSWORD\",
-    \"role\": \"SELLER\"
-  }" | jq -r '.id')
-
 echo "SELLER_ID=$SELLER_ID"
-echo
-
-# =========================
-# 4. LOGIN (AUTH DEMO)
-# =========================
-echo "4️⃣ Login CUSTOMER"
-CUSTOMER_LOGIN_JSON=$(curl -s -X POST $GATEWAY/api/users/login \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"email\": \"$CUSTOMER_EMAIL\",
-    \"password\": \"$PASSWORD\"
-  }")
-
-echo "$CUSTOMER_LOGIN_JSON" | jq
-CUSTOMER_TOKEN=$(echo "$CUSTOMER_LOGIN_JSON" | jq -r '.access_token')
-echo "CUSTOMER_TOKEN=$CUSTOMER_TOKEN"
-echo
-
-# =========================
-# 5. LIST USERS
-# =========================
-echo "5️⃣ List all active users"
-curl -s $GATEWAY/api/users | jq
-echo
-
-# =========================
-# 6. GET USER BY ID
-# =========================
-echo "6️⃣ Get user by ID"
-curl -s $GATEWAY/api/users/$CUSTOMER_ID | jq
-echo
-
-# =========================
-# 7. GET USER BY EMAIL
-# =========================
-echo "7️⃣ Get user by email"
-curl -s "$GATEWAY/api/users/by-email?email=$CUSTOMER_EMAIL" | jq
-echo
-
-# =========================
-# 8. CHECK EMAIL EXISTS
-# =========================
-echo "8️⃣ Check email exists"
-curl -s "$GATEWAY/api/users/email-exists?email=$CUSTOMER_EMAIL" | jq
-echo
-
-# =========================
-# 9. UPDATE USER
-# =========================
-echo "9️⃣ Update user name"
-curl -s -X PUT $GATEWAY/api/users/$CUSTOMER_ID \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"name\": \"${CUSTOMER_NAME} Updated\"
-  }"
-echo
-echo
-
-# =========================
-# 10. USER EXISTS (INTERNAL)
-# =========================
-echo "🔟 Check user exists (internal)"
-curl -s $GATEWAY/api/users/$CUSTOMER_ID/exists | jq
-echo
-
-# =========================
-# 11. GET USER ROLE (INTERNAL)
-# =========================
-echo "1️⃣1️⃣ Get user role (internal)"
-curl -s $GATEWAY/api/users/$SELLER_ID/role | jq
-echo
-
-# =========================
-# 12. DEACTIVATE USER
-# =========================
-echo "1️⃣2️⃣ Deactivate user"
-curl -s -X PATCH $GATEWAY/api/users/$CUSTOMER_ID/deactivate
-echo
-echo
-
-# =========================
-# 13. CHECK USER AFTER DEACTIVATE
-# =========================
-echo "1️⃣3️⃣ Get deactivated user (expected to fail)"
-curl -s $GATEWAY/api/users/$CUSTOMER_ID || true
-echo
-echo
-
-# =========================
-# 14. ACTIVATE USER
-# =========================
-echo "1️⃣4️⃣ Activate user again"
-curl -s -X PATCH $GATEWAY/api/users/$CUSTOMER_ID/activate
-echo
-echo
-
-# =========================
-# 15. USER STATS
-# =========================
-echo "1️⃣5️⃣ User statistics"
-curl -s $GATEWAY/api/users/stats | jq
-echo
-
-# =========================
-# 16. DELETE USER (SOFT DELETE)
-# =========================
-echo "1️⃣6️⃣ Delete user (soft delete)"
-curl -s -X DELETE $GATEWAY/api/users/$CUSTOMER_ID
-echo
-echo
-
-# =========================
-# 17. FINAL USER LIST
-# =========================
-echo "1️⃣7️⃣ List users after delete"
-curl -s $GATEWAY/api/users | jq
-echo
-
-echo "====================================="
-echo "✅ USER SERVICE API TEST DONE"
-echo "====================================="
+echo "ADMIN_ID=$ADMIN_ID"
+echo "USER_SERVICE_SMOKE=PASS"

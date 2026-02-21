@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_DB: user_db
       POSTGRES_USER: user
-      POSTGRES_PASSWORD: userpass
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:?USER_DB_PASSWORD is required}
     ports:
       - "5432:5432"
     volumes:
@@ -34,8 +34,8 @@ services:
       DB_PORT: 5432
       DB_NAME: user_db
       DB_USER: user
-      DB_PASSWORD: userpass
-      JWT_SECRET: mini-ecommerce-super-secret-change-me-please
+      DB_PASSWORD: ${USER_DB_PASSWORD:?USER_DB_PASSWORD is required}
+      JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}
       JWT_EXPIRES_MINUTES: 120
 
       # ===== OpenTelemetry =====
@@ -58,7 +58,7 @@ services:
     environment:
       POSTGRES_DB: product_db
       POSTGRES_USER: product
-      POSTGRES_PASSWORD: productpass
+      POSTGRES_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required}
     ports:
       - "5434:5432"
     volumes:
@@ -78,7 +78,7 @@ services:
     environment:
       DB_URL: jdbc:postgresql://product-db:5432/product_db
       DB_USER: product
-      DB_PASSWORD: productpass
+      DB_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required}
 
       OTEL_SERVICE_NAME: product-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -99,7 +99,7 @@ services:
     environment:
       POSTGRES_DB: order_db
       POSTGRES_USER: order
-      POSTGRES_PASSWORD: orderpass
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?ORDER_DB_PASSWORD is required}
     ports:
       - "5433:5432"
     volumes:
@@ -119,7 +119,7 @@ services:
     environment:
       DB_URL: jdbc:postgresql://order-db:5432/order_db
       DB_USER: order
-      DB_PASSWORD: orderpass
+      DB_PASSWORD: ${ORDER_DB_PASSWORD:?ORDER_DB_PASSWORD is required}
       PRODUCT_SERVICE_BASE_URL: http://product-service:8080
       HTTP_CONNECT_TIMEOUT_MS: 2000
       HTTP_READ_TIMEOUT_MS: 5000
@@ -148,7 +148,7 @@ services:
       ORDER_SERVICE_URL: http://order-service:8080
       GATEWAY_ALLOWED_ORIGIN_PATTERN: http://localhost:5173
       SECURITY_JWT_ENABLED: "true"
-      SECURITY_JWT_SECRET: mini-ecommerce-super-secret-change-me-please
+      SECURITY_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}
 
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317

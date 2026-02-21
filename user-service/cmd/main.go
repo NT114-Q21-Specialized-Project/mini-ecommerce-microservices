@@ -147,6 +147,7 @@ func main() {
 
 	r.HandleFunc("/users/by-email", h.GetUserByEmail).Methods("GET")
 	r.HandleFunc("/users/email-exists", h.EmailExists).Methods("GET")
+	r.HandleFunc("/users/stats", h.UserStats).Methods("GET")
 
 	r.HandleFunc("/users/{id}", h.GetUserByID).Methods("GET")
 	r.HandleFunc("/users/{id}", h.UpdateUser).Methods("PUT")
@@ -154,8 +155,6 @@ func main() {
 
 	r.HandleFunc("/users/{id}/activate", h.ActivateUser).Methods("PATCH")
 	r.HandleFunc("/users/{id}/deactivate", h.DeactivateUser).Methods("PATCH")
-
-	r.HandleFunc("/users/stats", h.UserStats).Methods("GET")
 
 	// =========================
 	// INTERNAL APIs (SERVICE-TO-SERVICE)

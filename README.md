@@ -1,691 +1,267 @@
 # Mini Ecommerce Microservices
 
-## 1. Tổng quan (Overview)
+## 1. Tổng quan
 
-**Mini Ecommerce Microservices** là một dự án microservices đơn giản nhằm mục đích **học tập và thực hành kiến trúc Microservices cũng như CI/CD pipeline**.
+**Mini Ecommerce Microservices** là dự án học tập theo hướng microservices + DevOps.
+Hệ thống tách service độc lập theo đúng nguyên tắc:
 
-Hệ thống được xây dựng theo hướng cloud-native, tách biệt từng service độc lập, dễ dàng mở rộng và tích hợp vào các nền tảng DevOps/Kubernetes sau này.
+- Mỗi service có codebase và database riêng.
+- Giao tiếp giữa các service qua HTTP/REST.
+- Client chỉ đi qua một điểm vào là API Gateway.
 
-Các service chính bao gồm:
-- **User Service**
-- **Order Service**
-- **Product Service**
-- **API Gateway**
+Thành phần chính:
 
----
+- `user-service` (Go)
+- `product-service` (Spring Boot)
+- `order-service` (Spring Boot)
+- `api-gateway` (Spring Cloud Gateway)
+- `front-end` (React)
 
-## 2. Kiến trúc Microservices
+Cổng mặc định:
 
-Kiến trúc hệ thống tuân theo nguyên tắc:
-- Mỗi microservice **độc lập về codebase và database**
-- Các service **giao tiếp với nhau thông qua HTTP/REST**
-- Database **không được chia sẻ giữa các service**
+- API Gateway: `9000`
+- User Service: `8080`
+- Product Service: `8082`
+- Order Service: `8081`
+- Front-end: `5173`
+
+## 2. Mermaid kiến trúc ứng dụng
 
 ```mermaid
 flowchart LR
-    %% ===== Client =====
-    Client[Client<br/>Browser / Curl / k6]
+    Client[Client\nBrowser/Curl] -->|HTTP /api/*| Gateway[API Gateway\n:9000]
 
-    %% ===== API Gateway =====
-    APIGateway["API Gateway<br/>(Spring Cloud Gateway)<br/>Port: 9000"]
+    Gateway -->|/api/users| UserService[User Service\nGo :8080]
+    Gateway -->|/api/products| ProductService[Product Service\nSpring Boot :8082]
+    Gateway -->|/api/orders| OrderService[Order Service\nSpring Boot :8081]
 
-    %% ===== Services =====
-    UserService["User Service<br/>Go<br/>Port 8080"]
-    ProductService["Product Service<br/>Spring Boot<br/>Port 8082"]
-    OrderService["Order Service<br/>Spring Boot<br/>Port 8081"]
+    UserService --> UserDB[(PostgreSQL\nuser_db)]
+    ProductService --> ProductDB[(PostgreSQL\nproduct_db)]
+    OrderService --> OrderDB[(PostgreSQL\norder_db)]
 
-    %% ===== Databases =====
-    UserDB[(PostgreSQL<br/>user_db)]
-    ProductDB[(PostgreSQL<br/>product_db)]
-    OrderDB[(PostgreSQL<br/>order_db)]
-
-    %% ===== Client Entry =====
-    Client -->|HTTP /api/*| APIGateway
-
-    %% ===== Gateway Routing =====
-    APIGateway -->|/api/users| UserService
-    APIGateway -->|/api/products| ProductService
-    APIGateway -->|/api/orders| OrderService
-
-    %% ===== Service to Service =====
-    OrderService -->|validate user| UserService
-    OrderService -->|decrease stock| ProductService
-    ProductService -->|check user role SELLER| UserService
-
-    %% ===== Database Access =====
-    UserService --> UserDB
-    ProductService --> ProductDB
-    OrderService --> OrderDB
-
+    OrderService -->|Giảm/Tăng tồn kho| ProductService
 ```
-## 2.1 Bảng tổng hợp API (API Summary)
 
-Tất cả các request từ **Client** đều được gửi đến **API Gateway** tại cổng **9000**.  
-API Gateway chịu trách nhiệm:
-- Định tuyến (Routing) request đến service tương ứng
-- Loại bỏ tiền tố `/api` trước khi forward vào service nội bộ
-- Đóng vai trò **Entry Point duy nhất** của hệ thống
+## 3. Bảng API cho từng service
 
----
+Base URL qua Gateway: `http://localhost:9000`
 
-### 🔹 User Service  
-**Gateway Route:** `/api/users/**`  
-**Service nội bộ:** User Service (port **8080**)
+### 3.1 User Service (`/api/users`)
 
-#### 🧩 Public APIs (Client / Frontend sử dụng)
+| Method | Endpoint | Auth | Mô tả |
+|---|---|---|---|
+| GET | `/api/users/health` | Public | Health check |
+| POST | `/api/users` | Public | Đăng ký user mới (`CUSTOMER/SELLER/ADMIN`) |
+| POST | `/api/users/login` | Public | Đăng nhập, trả JWT |
+| GET | `/api/users` | Bearer JWT | Danh sách user active |
+| GET | `/api/users/{id}` | Bearer JWT | Lấy user theo ID |
+| GET | `/api/users/by-email?email=...` | Bearer JWT | Lấy user theo email |
+| GET | `/api/users/email-exists?email=...` | Bearer JWT | Kiểm tra email tồn tại |
+| PUT | `/api/users/{id}` | Bearer JWT | Cập nhật user |
+| PATCH | `/api/users/{id}/activate` | Bearer JWT | Kích hoạt user |
+| PATCH | `/api/users/{id}/deactivate` | Bearer JWT | Vô hiệu hóa user |
+| DELETE | `/api/users/{id}` | Bearer JWT | Soft delete user |
+| GET | `/api/users/stats` | Bearer JWT | Thống kê user |
+| GET | `/api/users/{id}/exists` | Bearer JWT | Internal: kiểm tra tồn tại |
+| GET | `/api/users/{id}/role` | Bearer JWT | Internal: lấy role |
+| GET | `/api/users/{id}/validate` | Bearer JWT | Internal: validate user |
 
-| Method | Endpoint (Gateway) | Mô tả |
-|------|--------------------|------|
-| GET | `/api/users/health` | Health check User Service |
-| POST | `/api/users` | Tạo người dùng mới (`CUSTOMER`, `SELLER`) |
-| POST | `/api/users/login` | Đăng nhập người dùng (demo auth) |
-| GET | `/api/users` | Lấy danh sách user đang active |
-| GET | `/api/users/{id}` | Lấy thông tin user theo ID |
-| GET | `/api/users/by-email?email=` | Lấy thông tin user theo email |
-| GET | `/api/users/email-exists?email=` | Kiểm tra email đã tồn tại |
-| PUT | `/api/users/{id}` | Cập nhật thông tin user |
-| DELETE | `/api/users/{id}` | Xóa user (soft delete) |
-| PATCH | `/api/users/{id}/deactivate` | Vô hiệu hóa user |
-| PATCH | `/api/users/{id}/activate` | Kích hoạt lại user |
-| GET | `/api/users/stats` | Thống kê user (total, active, inactive, theo role) |
+### 3.2 Product Service (`/api/products`)
 
----
+| Method | Endpoint | Auth | Mô tả |
+|---|---|---|---|
+| GET | `/api/products` | Public | Danh sách sản phẩm |
+| GET | `/api/products/{id}` | Public | Chi tiết sản phẩm |
+| POST | `/api/products` | Bearer JWT (`SELLER/ADMIN`) | Tạo sản phẩm |
+| POST | `/api/products/{id}/decrease-stock?quantity=n` | Internal | Giảm tồn kho (order-service gọi) |
+| POST | `/api/products/{id}/increase-stock?quantity=n` | Internal | Hoàn tồn kho khi hủy đơn |
 
-#### 🔒 Internal APIs (Service-to-Service ONLY)
+### 3.3 Order Service (`/api/orders`)
 
-| Method | Endpoint | Mô tả |
-|------|---------|------|
-| GET | `/api/users/{id}/exists` | Kiểm tra user tồn tại & active |
-| GET | `/api/users/{id}/role` | Lấy role user |
-| GET | `/api/users/{id}/validate` | Validate user (exist, active, role) |
+| Method | Endpoint | Auth | Mô tả |
+|---|---|---|---|
+| POST | `/api/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | Tạo đơn hàng (yêu cầu header `Idempotency-Key`) |
+| GET | `/api/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | Danh sách đơn của user hiện tại |
+| GET | `/api/orders?userId=<uuid>` | Bearer JWT (`ADMIN`) | Truy vấn đơn theo user |
+| PATCH | `/api/orders/{id}/cancel` | Bearer JWT (`CUSTOMER/ADMIN`) | Hủy đơn hàng |
+| GET | `/api/orders/outbox/pending?limit=20` | Bearer JWT (`ADMIN`) | Danh sách outbox pending |
 
----
+Ghi chú:
 
-#### 🩺 System Endpoints
+- Contract OpenAPI nằm trong thư mục `api-contracts/`.
+- Với `POST /api/orders`, nếu gửi lại cùng `Idempotency-Key` + payload thì trả replay (`200`).
 
-| Method | Endpoint | Mô tả |
-|------|---------|------|
-| GET | `/health` | Service up & DB connected |
+## 4. Chạy nội bộ với Docker Compose
 
-**Ví dụ gọi API:**
+### 4.1 Chuẩn bị biến môi trường
+
 ```bash
-curl -s http://localhost:9000/api/users | jq
+cp .env.example .env
 ```
 
+Mở `.env` và cập nhật:
 
-**Ví dụ gọi API:**
+```env
+AUTH_JWT_SECRET=<secret-dai-va-kho-doan>
+USER_DB_PASSWORD=<mat-khau-user-db>
+PRODUCT_DB_PASSWORD=<mat-khau-product-db>
+ORDER_DB_PASSWORD=<mat-khau-order-db>
+```
+
+### 4.2 Chạy stack local
+
 ```bash
-curl -s http://localhost:9000/api/users | jq
+docker compose up --build -d
 ```
 
----
+Kiểm tra trạng thái:
 
-### 🔹 Product Service  
-**Gateway Route:** `/api/products/**`  
-**Service nội bộ:** Product Service (port **8082**)
-
-| Method | Endpoint (Gateway) | Mô tả |
-|------|--------------------|------|
-| POST | `/api/products` | Tạo sản phẩm mới (Yêu cầu Header `X-User-Id` của SELLER) |
-| GET | `/api/products` | Lấy danh sách toàn bộ sản phẩm |
-| GET | `/api/products/{id}` | Lấy chi tiết sản phẩm theo ID |
-| POST | `/api/products/{id}/decrease-stock?quantity={n}` | Giảm tồn kho sản phẩm theo số lượng |
-
-**Ví dụ gọi API:**
 ```bash
-curl -s http://localhost:9000/api/products | jq
+docker compose ps
 ```
 
----
+Xem log realtime:
 
-### 🔹 Order Service  
-**Gateway Route:** `/api/orders/**`  
-**Service nội bộ:** Order Service (port **8081**)
-
-| Method | Endpoint (Gateway) | Mô tả |
-|------|--------------------|------|
-| POST | `/api/orders` | Tạo đơn hàng mới (Validate User & trừ kho Product) |
-
-#### Query parameters bắt buộc cho `POST /api/orders`
-
-| Tên tham số | Kiểu dữ liệu | Bắt buộc | Mô tả |
-|-----------|-------------|---------|------|
-| userId | UUID | ✅ | ID của người mua |
-| productId | UUID | ✅ | ID của sản phẩm |
-| quantity | Integer | ✅ | Số lượng sản phẩm đặt mua |
-| totalAmount | Double | ✅ | Tổng giá trị đơn hàng |
-
-#### Error cases
-- User not found
-- Product not found
-- Not enough stock
-
-**Ví dụ gọi API:**
 ```bash
-curl -X POST "http://localhost:9000/api/orders?userId=<USER_ID>&productId=<PRODUCT_ID>&quantity=2&totalAmount=120.5"
+docker compose logs -f
 ```
 
----
+### 4.3 Chạy chế độ dev compose (nếu cần)
 
-### 2.3 HTTP Status Codes
+```bash
+docker compose -f docker-compose.dev.yml up --build -d
+```
 
-| Status | Ý nghĩa |
-|------|--------|
-| 201 | Tạo resource thành công |
-| 400 | Input không hợp lệ |
-| 403 | Không đủ quyền |
-| 404 | Resource không tồn tại |
-| 502 | Service phụ thuộc không khả dụng |
+### 4.4 Dừng và dọn môi trường
 
-## 3. Chi tiết ứng dụng
+Dừng và xóa container/network:
 
-### 3.1 User Service
+```bash
+docker compose down
+```
 
-**User Service** được viết hoàn toàn bằng **Go**, chịu trách nhiệm quản lý thông tin người dùng (CRUD User).
+Dừng và xóa cả volumes (reset dữ liệu DB local):
 
-**Công nghệ sử dụng:**
-- Go 1.22
-- PostgreSQL
-- Docker & Docker Compose
-- RESTful API
+```bash
+docker compose down -v
+```
 
----
+Nếu chạy file dev:
 
-### 🔐 User Role & Authorization
+```bash
+docker compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.dev.yml down -v
+```
 
-User Service chịu trách nhiệm **quản lý role người dùng** trong toàn hệ thống, phục vụ cho các service khác (Product / Order) kiểm tra quyền hạn.
+## 5. Kiểm thử API
 
-#### Các role hiện tại
-
-| Role | Mô tả |
-|------|------|
-| CUSTOMER | Người mua hàng |
-| SELLER | Người bán, được phép tạo sản phẩm |
-
-Role được lưu trực tiếp trong bảng `users` của User Service.
-
----
-
-### 🚀 Chạy User Service ở môi trường local
+Scripts kiểm thử nằm trong thư mục `api-testing/` và có thể chạy độc lập theo từng service.
 
 <details>
-<summary><strong>Click để xem hướng dẫn chạy local User Service</strong></summary>
+<summary><strong>5.1 User Service API Test</strong></summary>
 
----
-
-### Bước 1: Chạy User Service
+Chạy test:
 
 ```bash
-docker compose up --build user-service
+./api-testing/user-service.sh
 ```
 
-Nếu log hiển thị:
-
-```
-User Service running on :8080
-```
-
-👉 Điều này cho thấy **User Service đã kết nối thành công tới database**.
-
----
-
-### Bước 2: Test nhanh API (mở terminal mới)
-
-#### 1. Health check & Trạng thái hệ thống
-
-```bash
-curl -v -s http://localhost:9000/api/users/health
-```
-
----
-
-#### 2. Quản lý người dùng (CRUD Operations)
-
-##### Tạo user mới (CUSTOMER)
-
-```bash
-curl -s -X POST http://localhost:9000/api/users \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Tien Phat",
-    "email": "tienphat@gmail.com",
-    "role": "CUSTOMER"
-  }' | jq
-
-```
-##### Tạo user mới (SELLER)
-
-```bash
-curl -s -X POST http://localhost:9000/api/users \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Seller One",
-    "email": "seller1@gmail.com",
-    "role": "SELLER"
-  }' | jq
-
-```
-
-##### Cập nhật thông tin User (Partial Update) 
-
-Dùng để thay đổi tên hoặc email của một user hiện có (thay {userId} bằng ID thực tế).
-
-```bash
-curl -v -X PUT http://localhost:9000/api/users/{userId} \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Tien Phat Updated",
-    "email": "tienphat.new@gmail.com"
-  }'
-
-```
-##### Xóa user (Soft Delete) 
-
-Chuyển trạng thái `is_active` về  `false`, user sẽ không xuất hiện trong các danh sách công khai.
-
-```bash
-curl -v -X DELETE http://localhost:9000/api/users/{userId}
-```
-
----
-
-#### 3. Truy vấn dữ liệu (Query)
-
-##### Lấy danh sách user
-
-```bash
-curl -s http://localhost:9000/api/users | jq
-```
-
-Ví dụ kết quả:
-
-```json
-[
-  {
-    "id": "edf3ed8d-bfc6-485b-bae3-db00d7fb73c1",
-    "name": "Tien Phat",
-    "email": "tienphat@gmail.com",
-    "role": "CUSTOMER",
-    "created_at": "2026-01-17T03:21:16.576701Z"
-  },
-  {
-    "id": "62ca9e4e-8c65-4c7e-8348-535ff5e27b76",
-    "name": "Seller One",
-    "email": "seller1@gmail.com",
-    "role": "SELLER",
-    "created_at": "2026-01-17T04:45:35.827152Z"
-  }
-]
-
-```
-
-##### Lấy chi tiết user theo ID
-
-```bash
-curl -s http://localhost:9000/api/users/{userId} | jq
-```
-
-##### Kiểm tra User có tồn tại và đang active không
-
-```bash
-curl -s http://localhost:9000/api/users/{userId}/exists | jq
-```
-
-Kết quả trả về: `{"exists": true}` hoặc `{"exists": false}`
-
-#### 4. API Nội bộ (Internal API – Service to Service)
- 
-##### Lấy role user
-
-API này chỉ dùng cho các service nội bộ như Product Service hoặc Order Service.
-
-```bash
-curl -s http://localhost:9000/api/users/{userId}/role | jq
-```
-
-Ví dụ kết quả:
-
-```json
-{
-  "id": "62ca9e4e-8c65-4c7e-8348-535ff5e27b76",
-  "role": "SELLER"
-}
-```
-
-👉 Nếu các lệnh trên chạy thành công, **User Service đã hoạt động hoàn chỉnh ở môi trường local**.
-
-</details>
-
----
-
-### 3.2 Order Service
-
-**Order Service** được viết bằng **Spring Boot + JPA**, chịu trách nhiệm quản lý đơn hàng và thực hiện **service-to-service communication** với User Service để xác thực người dùng trước khi tạo đơn.
-
-Order Service **không truy cập trực tiếp database của User Service**, mà xác thực user thông qua HTTP call – đúng nguyên tắc microservices.
-
-**Công nghệ sử dụng:**
-- Java 17
-- Spring Boot 3
-- Spring Data JPA
-- PostgreSQL
-- Docker & Docker Compose
-- RESTful API
-
----
-
-### 🚀 Chạy Order Service ở môi trường local
-
-<details>
-<summary><strong>Click để xem hướng dẫn chạy local Order Service</strong></summary>
-
----
-
-### Bước 1: Chạy toàn bộ hệ thống (User + Order)
-
-Từ thư mục root của project:
-
-```bash
-docker compose up --build
-```
-
-Kiểm tra container:
-
-```bash
-docker ps
-```
-
-Kết quả mong đợi:
-
-```
-user-db
-user-service
-order-db
-order-service
-```
-
----
-
-### Bước 2: Kiểm tra User Service (bắt buộc)
-
-Order Service phụ thuộc vào User Service để xác thực user.
-
-```bash
-curl http://localhost:8080/users
-```
-
-Đảm bảo có ít nhất **1 user tồn tại**.
-
----
-
-### Bước 3: Tạo order 
-
-##### Tạo order với user hợp lệ
-
-```bash
-curl -X POST "http://localhost:8081/orders?userId=<USER_UUID>&totalAmount=120.5"
-```
-
-Ví dụ:
-
-```bash
-curl -X POST "http://localhost:8081/orders?userId=f5caf3b2-832b-4470-917b-eebdf4b34e76&totalAmount=120.5"
-```
-
-Kết quả ví dụ:
-
-```json
-{
-  "id": "7cf2ff2e-b742-49a6-8214-67762d67b8bc",
-  "userId": "f5caf3b2-832b-4470-917b-eebdf4b34e76",
-  "totalAmount": 120.5,
-  "status": "CREATED",
-  "createdAt": "2026-01-16T03:44:42.36490Z"
-}
-```
-
----
-
-#### Tạo order với user không tồn tại
-
-```bash
-curl -X POST "http://localhost:8081/orders?userId=00000000-0000-0000-0000-000000000000&totalAmount=50"
-```
-
-Kết quả:
-
-```
-HTTP/1.1 400 Bad Request
-User not found
-```
-
-#### Tạo order với số lượng vượt quá tồn kho
-
-```bash
-curl -X POST "http://localhost:8081/orders?userId=<USER_ID>&productId=<PRODUCT_ID>&quantity=9999&totalAmount=999999"
-```
-
-👉 Điều này chứng minh:
-- Order Service đã **gọi User Service thành công**
-- Business validation hoạt động đúng
-- Error handling được xử lý đúng chuẩn API
-
----
-
-### 🔑 Nguyên tắc thiết kế
-
-- **Database per service**
-  - User Service → `user_db`
-  - Order Service → `order_db`
-- Không sử dụng foreign key giữa các service
-- Service-to-service giao tiếp qua HTTP
-- Order Service chỉ lưu `userId`, không lưu thông tin user
-
-</details>
-
-
-### 3.3 Product Service
-
-**Product Service** được viết bằng **Spring Boot + JPA**, chịu trách nhiệm quản lý thông tin sản phẩm.
-
-**Công nghệ sử dụng:**
-- Java 17
-- Spring Boot 3
-- Spring Data JPA
-- PostgreSQL
-- Docker & Docker Compose
-
-### 🚀 Chạy Product Service ở môi trường local
-
-<details>
-<summary><strong>Click để xem hướng dẫn chạy local Product Service</strong></summary>
-
----
-
-```bash
-docker compose up --build product-service
-```
-
-#### Tạo product với SELLER (HỢP LỆ)
-
-```bash
-curl -s -X POST http://localhost:9000/api/products \
-  -H "Content-Type: application/json" \
-  -H "X-User-Id: 62ca9e4e-8c65-4c7e-8348-535ff5e27b76" \
-  -d '{
-    "name": "Macbook Pro",
-    "price": 2500,
-    "stock": 5
-  }' | jq
-```
-
-Ví dụ response:
-
-```json
-{
-  "id": "fa740574-e924-4baf-9058-488706ec95a0",
-  "name": "Macbook Pro",
-  "price": 2500.0,
-  "stock": 5,
-  "createdAt": "2026-01-17T09:00:33.217502303Z"
-}
-```
-
-#### Tạo product với CUSTOMER (BỊ TỪ CHỐI)
-
-```bash
-curl -X POST http://localhost:8082/products \
-  -H "Content-Type: application/json" \
-  -H "X-User-Id: edf3ed8d-bfc6-485b-bae3-db00d7fb73c1" \
-  -d '{
-    "name": "iPhone 15",
-    "price": 1200,
-    "stock": 10
-  }'
-```
-
-Response:
-```json
-Only SELLER can create product
-```
-
-#### Lấy danh sách product
-
-```bash
-curl -s http://localhost:9000/api/products | jq
-```
-
-Ví dụ Response:
-
-```json
-[
-  {
-    "id": "e01fb1e3-8c0b-4ee8-b531-7273e55cdb60",
-    "name": "Macbook Pro",
-    "price": 2500.0,
-    "stock": 8,
-    "createdAt": "2026-01-17T03:21:56.543595Z"
-  },
-  {
-    "id": "e747500d-6719-4819-95a2-6016ee931865",
-    "name": "Macbook Pro",
-    "price": 2500.0,
-    "stock": 3,
-    "createdAt": "2026-01-17T05:08:12.580308Z"
-  },
-  {
-    "id": "2496e6fb-1adf-4f74-9e4c-41d67f2a4aa7",
-    "name": "Macbook Pro M3",
-    "price": 2800.0,
-    "stock": 10,
-    "createdAt": "2026-01-17T08:42:47.024898Z"
-  },
-  {
-    "id": "fa740574-e924-4baf-9058-488706ec95a0",
-    "name": "Macbook Pro",
-    "price": 2500.0,
-    "stock": 5,
-    "createdAt": "2026-01-17T09:00:33.217502Z"
-  }
-]
-
-```
-#### Lấy product theo ID
-
-```bash
-curl http://localhost:8082/products/{productId}
-```
-
-#### Giảm tồn kho sản phẩm
-
-```bash
-curl -s -X POST "http://localhost:9000/api/products/{productId}/decrease-stock?quantity=2"
+Output mẫu (đã chạy thực tế):
+
+```text
+===== USER SERVICE API TEST =====
+BASE_URL=http://localhost:9000
+SUFFIX=1771653992
+[PASS] health check (200)
+[PASS] create customer (201)
+[PASS] create seller (201)
+[PASS] create admin (201)
+[PASS] login admin (200)
+[PASS] list users (200)
+[PASS] get user by id (200)
+[PASS] get user by email (200)
+[PASS] check email exists (200)
+[PASS] update user (204)
+[PASS] internal exists (200)
+[PASS] internal role (200)
+[PASS] internal validate (200)
+[PASS] deactivate user (204)
+[PASS] activate user (204)
+[PASS] user stats (200)
+[PASS] soft delete user (204)
+[PASS] list users after delete (200)
+----- SUMMARY -----
+CUSTOMER_ID=eb7f8ee6-aba7-4064-aeb2-131622271c75
+SELLER_ID=47356677-4257-47f3-ad81-fb2394b46f59
+ADMIN_ID=27eecd81-f278-4537-ae96-9079b06325b7
+USER_SERVICE_SMOKE=PASS
 ```
 
 </details>
 
-### 3.4 ORDER ↔ PRODUCT INTEGRATION
-#### 📦 Order tạo đơn & tự động trừ tồn kho sản phẩm
+<details>
+<summary><strong>5.2 Product Service API Test</strong></summary>
 
-Khi tạo đơn hàng thành công, Order Service sẽ gọi sang Product Service để:
-- Kiểm tra tồn kho
-- Giảm số lượng sản phẩm tương ứng
-
-**Luồng xử lý:**
-```bash
-Client
-  → Order Service
-      → Validate User (User Service)
-      → Check & Decrease Stock (Product Service)
-      → Save Order
-```
-
-**Tạo order hợp lệ (Customer mua hàng)**
-Điều kiện:
-- User tồn tại
-- Product tồn tại
-- Quantity ≤ stock hiện tại
-
-```bash 
-curl -s -X POST "http://localhost:9000/api/orders?userId={userID}&productId={productID}&quantity=2&totalAmount=5000" | jq
-```
-**Ví dụ response:**
-```json
-{
-  "id": "ef65b13f-9c75-472e-88db-95c777414c52",
-  "userId": "edf3ed8d-bfc6-485b-bae3-db00d7fb73c1",
-  "productId": "2496e6fb-1adf-4f74-9e4c-41d67f2a4aa7",
-  "quantity": 2,
-  "totalAmount": 5000.0,
-  "status": "CREATED",
-  "createdAt": "2026-01-17T09:05:17.580037038Z"
-}
-
-```
-
-**🔍 Kiểm tra tồn kho sau khi tạo order**
-
-Sau khi order được tạo thành công, tồn kho của sản phẩm sẽ giảm tương ứng.
+Chạy test:
 
 ```bash
-curl http://localhost:8082/products/{productID}
-```
-**Ví dụ kết quả:**
-
-```json
-{
-  "id": "2496e6fb-1adf-4f74-9e4c-41d67f2a4aa7",
-  "name": "Macbook Pro M3",
-  "price": 2800.0,
-  "stock": 8,
-  "createdAt": "2026-01-17T08:42:47.024898Z"
-}
-
+./api-testing/product-service.sh
 ```
 
-#### Các trường hợp lỗi
+Output mẫu (đã chạy thực tế):
 
-**Quantity vượt quá tồn kho**
-```bash
-curl -s -X POST "http://localhost:9000/api/orders?userId=<USER_ID>&productId=<PRODUCT_ID>&quantity=9999&totalAmount=999999"
+```text
+===== PRODUCT SERVICE API TEST =====
+BASE_URL=http://localhost:9000
+SUFFIX=1771654012
+[PASS] create seller (201)
+[PASS] login seller (200)
+[PASS] create customer (201)
+[PASS] login customer (200)
+[PASS] create product by seller (201)
+[PASS] customer cannot create product (403)
+[PASS] list products (200)
+[PASS] get product by id (200)
+----- SUMMARY -----
+PRODUCT_ID=6c5a2342-8818-45e0-adb4-f9a9b2556984
+PRODUCT_SERVICE_SMOKE=PASS
 ```
 
-**Response:**
+</details>
 
-```matheamtica
-400 Bad Request
-Not enough stock
-```
+<details>
+<summary><strong>5.3 Order Service API Test</strong></summary>
 
-**Product không tồn tại**
+Chạy test:
 
 ```bash
-curl -s -X POST "http://localhost:9000/api/orders?userId=<USER_ID>&productId=00000000-0000-0000-0000-000000000000&quantity=1&totalAmount=100"
+./api-testing/order-service.sh
 ```
 
-**Response:**
+Output mẫu (đã chạy thực tế):
 
-```matheamtica
-400 Bad Request
-Product not found
+```text
+===== ORDER SERVICE API TEST =====
+BASE_URL=http://localhost:9000
+SUFFIX=1771654019
+[PASS] create customer (201)
+[PASS] create seller (201)
+[PASS] create admin (201)
+[PASS] login customer (200)
+[PASS] login seller (200)
+[PASS] login admin (200)
+[PASS] create product (201)
+[PASS] create order (201)
+[PASS] idempotency replay (200)
+[PASS] replay same order id
+[PASS] list my orders (200)
+[PASS] cancel order (200)
+[PASS] create order out-of-stock (400)
+[PASS] pending outbox (200)
+----- SUMMARY -----
+PRODUCT_ID=aa983240-c247-45ee-a81e-af438c908fc2
+ORDER_ID=9f9c5c1e-cb61-4ae5-8d03-2b7a3dafc4d8
+ORDER_SERVICE_SMOKE=PASS
 ```
+
+</details>
