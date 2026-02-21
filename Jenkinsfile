@@ -13,6 +13,11 @@ pipeline {
 
         GITOPS_REPO = "https://github.com/NT114-Q21-Specialized-Project/kubernetes-hub.git"
         GITOPS_DIR  = "kubernetes-hub"
+
+        TRIVY_IMAGE          = "aquasec/trivy:0.57.1"
+        TRIVY_SEVERITY       = "HIGH,CRITICAL"
+        TRIVY_EXIT_CODE      = "1"
+        TRIVY_IGNORE_UNFIXED = "true"
     }
 
     stages {
@@ -237,6 +242,132 @@ pipeline {
                     when { environment name: 'BUILD_FRONTEND', value: 'true' }
                     steps {
                         sh "docker build -t ${DOCKERHUB_USER}/${PROJECT}-frontend:${IMAGE_TAG} ./front-end"
+                    }
+                }
+            }
+        }
+
+        /* =========================
+           SECURITY SCAN (TRIVY)
+        ========================= */
+        stage('Security Scan (Trivy)') {
+            when {
+                expression {
+                    env.BUILD_API_GATEWAY  == "true" ||
+                    env.BUILD_USER_SERVICE == "true" ||
+                    env.BUILD_PRODUCT      == "true" ||
+                    env.BUILD_ORDER        == "true" ||
+                    env.BUILD_FRONTEND     == "true"
+                }
+            }
+            stages {
+                stage('Update Trivy DB') {
+                    steps {
+                        sh '''
+                          mkdir -p .trivy-cache
+                          docker run --rm \
+                            -v "$PWD/.trivy-cache:/root/.cache/" \
+                            ${TRIVY_IMAGE} image --download-db-only --no-progress
+                        '''
+                    }
+                }
+
+                stage('Scan Images') {
+                    parallel {
+                        stage('Scan api-gateway image') {
+                            when { environment name: 'BUILD_API_GATEWAY', value: 'true' }
+                            steps {
+                                sh '''
+                                  docker run --rm \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    -v "$PWD/.trivy-cache:/root/.cache/" \
+                                    ${TRIVY_IMAGE} image \
+                                    --no-progress \
+                                    --skip-db-update \
+                                    --scanners vuln \
+                                    --severity ${TRIVY_SEVERITY} \
+                                    --exit-code ${TRIVY_EXIT_CODE} \
+                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
+                                    ${DOCKERHUB_USER}/${PROJECT}-api-gateway:${IMAGE_TAG}
+                                '''
+                            }
+                        }
+
+                        stage('Scan user-service image') {
+                            when { environment name: 'BUILD_USER_SERVICE', value: 'true' }
+                            steps {
+                                sh '''
+                                  docker run --rm \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    -v "$PWD/.trivy-cache:/root/.cache/" \
+                                    ${TRIVY_IMAGE} image \
+                                    --no-progress \
+                                    --skip-db-update \
+                                    --scanners vuln \
+                                    --severity ${TRIVY_SEVERITY} \
+                                    --exit-code ${TRIVY_EXIT_CODE} \
+                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
+                                    ${DOCKERHUB_USER}/${PROJECT}-user-service:${IMAGE_TAG}
+                                '''
+                            }
+                        }
+
+                        stage('Scan product-service image') {
+                            when { environment name: 'BUILD_PRODUCT', value: 'true' }
+                            steps {
+                                sh '''
+                                  docker run --rm \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    -v "$PWD/.trivy-cache:/root/.cache/" \
+                                    ${TRIVY_IMAGE} image \
+                                    --no-progress \
+                                    --skip-db-update \
+                                    --scanners vuln \
+                                    --severity ${TRIVY_SEVERITY} \
+                                    --exit-code ${TRIVY_EXIT_CODE} \
+                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
+                                    ${DOCKERHUB_USER}/${PROJECT}-product-service:${IMAGE_TAG}
+                                '''
+                            }
+                        }
+
+                        stage('Scan order-service image') {
+                            when { environment name: 'BUILD_ORDER', value: 'true' }
+                            steps {
+                                sh '''
+                                  docker run --rm \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    -v "$PWD/.trivy-cache:/root/.cache/" \
+                                    ${TRIVY_IMAGE} image \
+                                    --no-progress \
+                                    --skip-db-update \
+                                    --scanners vuln \
+                                    --severity ${TRIVY_SEVERITY} \
+                                    --exit-code ${TRIVY_EXIT_CODE} \
+                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
+                                    ${DOCKERHUB_USER}/${PROJECT}-order-service:${IMAGE_TAG}
+                                '''
+                            }
+                        }
+
+                        stage('Scan frontend image') {
+                            when { environment name: 'BUILD_FRONTEND', value: 'true' }
+                            steps {
+                                sh '''
+                                  docker run --rm \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    -v "$PWD/.trivy-cache:/root/.cache/" \
+                                    ${TRIVY_IMAGE} image \
+                                    --no-progress \
+                                    --skip-db-update \
+                                    --scanners vuln \
+                                    --severity ${TRIVY_SEVERITY} \
+                                    --exit-code ${TRIVY_EXIT_CODE} \
+                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
+                                    ${DOCKERHUB_USER}/${PROJECT}-frontend:${IMAGE_TAG}
+                                '''
+                            }
+                        }
                     }
                 }
             }
