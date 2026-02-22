@@ -13,12 +13,21 @@ def getServiceMatrix() {
     ]
 }
 
+def getEnvFlag(String name) {
+    def value = env.getProperty(name)
+    return value ? value : 'false'
+}
+
+def setEnvFlag(String name, String value) {
+    env.setProperty(name, value)
+}
+
 def buildServices() {
-    return getServiceMatrix().findAll { service -> env[service.flag] == 'true' }
+    return getServiceMatrix().findAll { service -> getEnvFlag(service.flag) == 'true' }
 }
 
 def anyServiceBuildEnabled() {
-    return getServiceMatrix().any { service -> env[service.flag] == 'true' }
+    return getServiceMatrix().any { service -> getEnvFlag(service.flag) == 'true' }
 }
 
 def imageRef(Map service) {
@@ -158,26 +167,27 @@ pipeline {
 
                     // Set build flags dynamically from the service matrix.
                     getServiceMatrix().each { service ->
-                        env[service.flag] = changedFiles.any { it.startsWith("${service.dir}/") } ? 'true' : 'false'
+                        def shouldBuild = changedFiles.any { it.startsWith("${service.dir}/") } ? 'true' : 'false'
+                        setEnvFlag(service.flag, shouldBuild)
                     }
 
-                    env.BUILD_CONTRACTS = changedFiles.any { it.startsWith('api-contracts/') } ? 'true' : 'false'
+                    setEnvFlag('BUILD_CONTRACTS', changedFiles.any { it.startsWith('api-contracts/') } ? 'true' : 'false')
 
                     // If CI config changed, force rebuild/retest all services.
                     if (isCiChange) {
                         echo 'Jenkinsfile changed -> rebuild all services'
                         getServiceMatrix().each { service ->
-                            env[service.flag] = 'true'
+                            setEnvFlag(service.flag, 'true')
                         }
-                        env.BUILD_CONTRACTS = 'true'
+                        setEnvFlag('BUILD_CONTRACTS', 'true')
                     }
 
                     echo '================= CHANGE SUMMARY ================='
                     echo "Jenkinsfile   : ${isCiChange}"
                     getServiceMatrix().each { service ->
-                        echo String.format('%-12s : %s', service.name, env[service.flag])
+                        echo String.format('%-12s : %s', service.name, getEnvFlag(service.flag))
                     }
-                    echo "contracts    : ${env.BUILD_CONTRACTS}"
+                    echo "contracts    : ${getEnvFlag('BUILD_CONTRACTS')}"
                     echo '=================================================='
                 }
             }
