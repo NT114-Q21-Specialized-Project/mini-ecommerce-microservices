@@ -1,3 +1,111 @@
+/*
+ * Dynamic Jenkins pipeline for a monorepo microservices setup.
+ * Add a new service by appending one line in getServiceMatrix().
+ */
+
+def getServiceMatrix() {
+    return [
+        [name: 'api-gateway',    dir: 'api-gateway',   flag: 'BUILD_API_GATEWAY',  image: 'api-gateway'],
+        [name: 'user-service',   dir: 'user-service',  flag: 'BUILD_USER_SERVICE', image: 'user-service'],
+        [name: 'product-service',dir: 'product-service', flag: 'BUILD_PRODUCT',    image: 'product-service'],
+        [name: 'order-service',  dir: 'order-service', flag: 'BUILD_ORDER',        image: 'order-service'],
+        [name: 'frontend',       dir: 'front-end',     flag: 'BUILD_FRONTEND',     image: 'frontend']
+    ]
+}
+
+def buildServices() {
+    return getServiceMatrix().findAll { service -> env[service.flag] == 'true' }
+}
+
+def anyServiceBuildEnabled() {
+    return getServiceMatrix().any { service -> env[service.flag] == 'true' }
+}
+
+def imageRef(Map service) {
+    return "${env.DOCKERHUB_USER}/${env.PROJECT}-${service.image}:${env.IMAGE_TAG}"
+}
+
+def runServiceTest(Map service) {
+    switch (service.name) {
+        case 'api-gateway':
+        case 'product-service':
+        case 'order-service':
+            sh """
+              docker run --rm \\
+                -v "\$PWD/${service.dir}:/app" \\
+                -w /app \\
+                maven:3.9.6-eclipse-temurin-17 \\
+                mvn -B test
+            """
+            break
+
+        case 'user-service':
+            sh """
+              docker run --rm \\
+                -v "\$PWD/${service.dir}:/app" \\
+                -w /app \\
+                golang:1.24-alpine \\
+                sh -c "go test ./..."
+            """
+            break
+
+        case 'frontend':
+            sh """
+              docker run --rm \\
+                -v "\$PWD/${service.dir}:/app" \\
+                -w /app \\
+                node:20-alpine \\
+                sh -c "npm ci && npm run build"
+            """
+            break
+
+        default:
+            error "No test command configured for service: ${service.name}"
+    }
+}
+
+def runParallelForSelected(String stagePrefix, Closure worker) {
+    def tasks = [:]
+
+    buildServices().each { svc ->
+        def service = svc
+        tasks["${stagePrefix} ${service.name}"] = {
+            worker(service)
+        }
+    }
+
+    if (tasks.isEmpty()) {
+        echo "No services selected for ${stagePrefix.toLowerCase()}."
+        return
+    }
+
+    parallel tasks
+}
+
+def updateGitOpsImageTag(Map service) {
+    sh """
+      yq e -i '.images[] |= (select(.name == "${env.DOCKERHUB_USER}/${env.PROJECT}-${service.image}").newTag = "${env.IMAGE_TAG}")' \\
+      overlays/dev/kustomization.yaml
+    """
+}
+
+def cleanupBuiltImages() {
+    def images = buildServices().collect { service -> imageRef(service) }
+
+    if (images.isEmpty()) {
+        echo 'No built images to clean up.'
+        return
+    }
+
+    images.each { img ->
+        sh "docker image rm -f ${img} || true"
+    }
+
+    // Remove dangling layers to keep Jenkins workers clean.
+    sh 'docker image prune -f || true'
+    sh 'rm -rf .trivy-cache || true'
+}
+
 pipeline {
     agent any
 
@@ -37,53 +145,40 @@ pipeline {
         stage('Detect Changed Services') {
             steps {
                 script {
-
-                    // Get list of changed files between the last two commits
                     def changedFilesRaw = sh(
-                        script: "git diff --name-only HEAD~1 HEAD || true",
+                        script: 'git diff --name-only HEAD~1 HEAD || true',
                         returnStdout: true
                     ).trim()
 
-                    def changedFiles = changedFilesRaw
-                        ? changedFilesRaw.split("\n")
-                        : []
+                    def changedFiles = changedFilesRaw ? changedFilesRaw.split('\n') : []
+                    def isCiChange = changedFiles.any { it == 'Jenkinsfile' }
 
-                    echo "Changed files:"
+                    echo 'Changed files:'
                     changedFiles.each { echo " - ${it}" }
 
-                    // Detect Jenkinsfile changes (CI configuration changes)
-                    def isCiChange = changedFiles.any { it == "Jenkinsfile" }
-
-                    // Detect changes per service directory
-                    env.BUILD_API_GATEWAY  = changedFiles.any { it.startsWith("api-gateway/") }  ? "true" : "false"
-                    env.BUILD_USER_SERVICE = changedFiles.any { it.startsWith("user-service/") } ? "true" : "false"
-                    env.BUILD_PRODUCT      = changedFiles.any { it.startsWith("product-service/") } ? "true" : "false"
-                    env.BUILD_ORDER        = changedFiles.any { it.startsWith("order-service/") } ? "true" : "false"
-                    env.BUILD_FRONTEND     = changedFiles.any { it.startsWith("front-end/") } ? "true" : "false"
-                    env.BUILD_CONTRACTS    = changedFiles.any { it.startsWith("api-contracts/") } ? "true" : "false"
-
-                    // If Jenkinsfile is changed → force rebuild ALL services
-                    if (isCiChange) {
-                        echo "⚠️ Jenkinsfile changed → rebuild ALL services"
-                        env.BUILD_API_GATEWAY  = "true"
-                        env.BUILD_USER_SERVICE = "true"
-                        env.BUILD_PRODUCT      = "true"
-                        env.BUILD_ORDER        = "true"
-                        env.BUILD_FRONTEND     = "true"
-                        env.BUILD_CONTRACTS    = "true"
+                    // Set build flags dynamically from the service matrix.
+                    getServiceMatrix().each { service ->
+                        env[service.flag] = changedFiles.any { it.startsWith("${service.dir}/") } ? 'true' : 'false'
                     }
 
-                    echo """
-        ================= CHANGE SUMMARY =================
-        Jenkinsfile   : ${isCiChange}
-        api-gateway   : ${env.BUILD_API_GATEWAY}
-        user-service  : ${env.BUILD_USER_SERVICE}
-        product       : ${env.BUILD_PRODUCT}
-        order         : ${env.BUILD_ORDER}
-        front-end     : ${env.BUILD_FRONTEND}
-        contracts     : ${env.BUILD_CONTRACTS}
-        =================================================
-        """
+                    env.BUILD_CONTRACTS = changedFiles.any { it.startsWith('api-contracts/') } ? 'true' : 'false'
+
+                    // If CI config changed, force rebuild/retest all services.
+                    if (isCiChange) {
+                        echo 'Jenkinsfile changed -> rebuild all services'
+                        getServiceMatrix().each { service ->
+                            env[service.flag] = 'true'
+                        }
+                        env.BUILD_CONTRACTS = 'true'
+                    }
+
+                    echo '================= CHANGE SUMMARY ================='
+                    echo "Jenkinsfile   : ${isCiChange}"
+                    getServiceMatrix().each { service ->
+                        echo String.format('%-12s : %s', service.name, env[service.flag])
+                    }
+                    echo "contracts    : ${env.BUILD_CONTRACTS}"
+                    echo '=================================================='
                 }
             }
         }
@@ -91,12 +186,7 @@ pipeline {
         stage('Contract Validation') {
             when {
                 expression {
-                    env.BUILD_CONTRACTS    == "true" ||
-                    env.BUILD_API_GATEWAY  == "true" ||
-                    env.BUILD_USER_SERVICE == "true" ||
-                    env.BUILD_PRODUCT      == "true" ||
-                    env.BUILD_ORDER        == "true" ||
-                    env.BUILD_FRONTEND     == "true"
+                    env.BUILD_CONTRACTS == 'true' || anyServiceBuildEnabled()
                 }
             }
             steps {
@@ -121,127 +211,33 @@ pipeline {
             }
         }
 
-
         /* =========================
            TEST CHANGED SERVICES
         ========================= */
         stage('Test Services') {
             when {
-                expression {
-                    env.BUILD_API_GATEWAY  == "true" ||
-                    env.BUILD_USER_SERVICE == "true" ||
-                    env.BUILD_PRODUCT      == "true" ||
-                    env.BUILD_ORDER        == "true" ||
-                    env.BUILD_FRONTEND     == "true"
-                }
+                expression { anyServiceBuildEnabled() }
             }
-            parallel {
-                stage('Test api-gateway') {
-                    when { environment name: 'BUILD_API_GATEWAY', value: 'true' }
-                    steps {
-                        sh '''
-                          docker run --rm \
-                            -v "$PWD/api-gateway:/app" \
-                            -w /app \
-                            maven:3.9.6-eclipse-temurin-17 \
-                            mvn -B test
-                        '''
-                    }
-                }
-
-                stage('Test user-service') {
-                    when { environment name: 'BUILD_USER_SERVICE', value: 'true' }
-                    steps {
-                        sh '''
-                          docker run --rm \
-                            -v "$PWD/user-service:/app" \
-                            -w /app \
-                            golang:1.24-alpine \
-                            sh -c "go test ./..."
-                        '''
-                    }
-                }
-
-                stage('Test product-service') {
-                    when { environment name: 'BUILD_PRODUCT', value: 'true' }
-                    steps {
-                        sh '''
-                          docker run --rm \
-                            -v "$PWD/product-service:/app" \
-                            -w /app \
-                            maven:3.9.6-eclipse-temurin-17 \
-                            mvn -B test
-                        '''
-                    }
-                }
-
-                stage('Test order-service') {
-                    when { environment name: 'BUILD_ORDER', value: 'true' }
-                    steps {
-                        sh '''
-                          docker run --rm \
-                            -v "$PWD/order-service:/app" \
-                            -w /app \
-                            maven:3.9.6-eclipse-temurin-17 \
-                            mvn -B test
-                        '''
-                    }
-                }
-
-                stage('Test frontend') {
-                    when { environment name: 'BUILD_FRONTEND', value: 'true' }
-                    steps {
-                        sh '''
-                          docker run --rm \
-                            -v "$PWD/front-end:/app" \
-                            -w /app \
-                            node:20-alpine \
-                            sh -c "npm ci && npm run build"
-                        '''
+            steps {
+                script {
+                    runParallelForSelected('Test') { service ->
+                        runServiceTest(service)
                     }
                 }
             }
         }
 
-
         /* =========================
            BUILD IMAGES
         ========================= */
         stage('Build Images') {
-            parallel {
-
-                stage('Build api-gateway') {
-                    when { environment name: 'BUILD_API_GATEWAY', value: 'true' }
-                    steps {
-                        sh "docker build -t ${DOCKERHUB_USER}/${PROJECT}-api-gateway:${IMAGE_TAG} ./api-gateway"
-                    }
-                }
-
-                stage('Build user-service') {
-                    when { environment name: 'BUILD_USER_SERVICE', value: 'true' }
-                    steps {
-                        sh "docker build -t ${DOCKERHUB_USER}/${PROJECT}-user-service:${IMAGE_TAG} ./user-service"
-                    }
-                }
-
-                stage('Build product-service') {
-                    when { environment name: 'BUILD_PRODUCT', value: 'true' }
-                    steps {
-                        sh "docker build -t ${DOCKERHUB_USER}/${PROJECT}-product-service:${IMAGE_TAG} ./product-service"
-                    }
-                }
-
-                stage('Build order-service') {
-                    when { environment name: 'BUILD_ORDER', value: 'true' }
-                    steps {
-                        sh "docker build -t ${DOCKERHUB_USER}/${PROJECT}-order-service:${IMAGE_TAG} ./order-service"
-                    }
-                }
-
-                stage('Build frontend') {
-                    when { environment name: 'BUILD_FRONTEND', value: 'true' }
-                    steps {
-                        sh "docker build -t ${DOCKERHUB_USER}/${PROJECT}-frontend:${IMAGE_TAG} ./front-end"
+            when {
+                expression { anyServiceBuildEnabled() }
+            }
+            steps {
+                script {
+                    runParallelForSelected('Build') { service ->
+                        sh "docker build -t ${imageRef(service)} ./${service.dir}"
                     }
                 }
             }
@@ -252,13 +248,7 @@ pipeline {
         ========================= */
         stage('Security Scan (Trivy)') {
             when {
-                expression {
-                    env.BUILD_API_GATEWAY  == "true" ||
-                    env.BUILD_USER_SERVICE == "true" ||
-                    env.BUILD_PRODUCT      == "true" ||
-                    env.BUILD_ORDER        == "true" ||
-                    env.BUILD_FRONTEND     == "true"
-                }
+                expression { anyServiceBuildEnabled() }
             }
             stages {
                 stage('Update Trivy DB') {
@@ -273,99 +263,22 @@ pipeline {
                 }
 
                 stage('Scan Images') {
-                    parallel {
-                        stage('Scan api-gateway image') {
-                            when { environment name: 'BUILD_API_GATEWAY', value: 'true' }
-                            steps {
-                                sh '''
+                    steps {
+                        script {
+                            runParallelForSelected('Scan') { service ->
+                                sh """
                                   docker run --rm \
                                     -v /var/run/docker.sock:/var/run/docker.sock \
-                                    -v "$PWD/.trivy-cache:/root/.cache/" \
-                                    ${TRIVY_IMAGE} image \
+                                    -v "\$PWD/.trivy-cache:/root/.cache/" \
+                                    ${env.TRIVY_IMAGE} image \
                                     --no-progress \
                                     --skip-db-update \
                                     --scanners vuln \
-                                    --severity ${TRIVY_SEVERITY} \
-                                    --exit-code ${TRIVY_EXIT_CODE} \
-                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
-                                    ${DOCKERHUB_USER}/${PROJECT}-api-gateway:${IMAGE_TAG}
-                                '''
-                            }
-                        }
-
-                        stage('Scan user-service image') {
-                            when { environment name: 'BUILD_USER_SERVICE', value: 'true' }
-                            steps {
-                                sh '''
-                                  docker run --rm \
-                                    -v /var/run/docker.sock:/var/run/docker.sock \
-                                    -v "$PWD/.trivy-cache:/root/.cache/" \
-                                    ${TRIVY_IMAGE} image \
-                                    --no-progress \
-                                    --skip-db-update \
-                                    --scanners vuln \
-                                    --severity ${TRIVY_SEVERITY} \
-                                    --exit-code ${TRIVY_EXIT_CODE} \
-                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
-                                    ${DOCKERHUB_USER}/${PROJECT}-user-service:${IMAGE_TAG}
-                                '''
-                            }
-                        }
-
-                        stage('Scan product-service image') {
-                            when { environment name: 'BUILD_PRODUCT', value: 'true' }
-                            steps {
-                                sh '''
-                                  docker run --rm \
-                                    -v /var/run/docker.sock:/var/run/docker.sock \
-                                    -v "$PWD/.trivy-cache:/root/.cache/" \
-                                    ${TRIVY_IMAGE} image \
-                                    --no-progress \
-                                    --skip-db-update \
-                                    --scanners vuln \
-                                    --severity ${TRIVY_SEVERITY} \
-                                    --exit-code ${TRIVY_EXIT_CODE} \
-                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
-                                    ${DOCKERHUB_USER}/${PROJECT}-product-service:${IMAGE_TAG}
-                                '''
-                            }
-                        }
-
-                        stage('Scan order-service image') {
-                            when { environment name: 'BUILD_ORDER', value: 'true' }
-                            steps {
-                                sh '''
-                                  docker run --rm \
-                                    -v /var/run/docker.sock:/var/run/docker.sock \
-                                    -v "$PWD/.trivy-cache:/root/.cache/" \
-                                    ${TRIVY_IMAGE} image \
-                                    --no-progress \
-                                    --skip-db-update \
-                                    --scanners vuln \
-                                    --severity ${TRIVY_SEVERITY} \
-                                    --exit-code ${TRIVY_EXIT_CODE} \
-                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
-                                    ${DOCKERHUB_USER}/${PROJECT}-order-service:${IMAGE_TAG}
-                                '''
-                            }
-                        }
-
-                        stage('Scan frontend image') {
-                            when { environment name: 'BUILD_FRONTEND', value: 'true' }
-                            steps {
-                                sh '''
-                                  docker run --rm \
-                                    -v /var/run/docker.sock:/var/run/docker.sock \
-                                    -v "$PWD/.trivy-cache:/root/.cache/" \
-                                    ${TRIVY_IMAGE} image \
-                                    --no-progress \
-                                    --skip-db-update \
-                                    --scanners vuln \
-                                    --severity ${TRIVY_SEVERITY} \
-                                    --exit-code ${TRIVY_EXIT_CODE} \
-                                    --ignore-unfixed=${TRIVY_IGNORE_UNFIXED} \
-                                    ${DOCKERHUB_USER}/${PROJECT}-frontend:${IMAGE_TAG}
-                                '''
+                                    --severity ${env.TRIVY_SEVERITY} \
+                                    --exit-code ${env.TRIVY_EXIT_CODE} \
+                                    --ignore-unfixed=${env.TRIVY_IGNORE_UNFIXED} \
+                                    ${imageRef(service)}
+                                """
                             }
                         }
                     }
@@ -378,13 +291,7 @@ pipeline {
         ========================= */
         stage('Docker Login') {
             when {
-                expression {
-                    env.BUILD_API_GATEWAY  == "true" ||
-                    env.BUILD_USER_SERVICE == "true" ||
-                    env.BUILD_PRODUCT      == "true" ||
-                    env.BUILD_ORDER        == "true" ||
-                    env.BUILD_FRONTEND     == "true"
-                }
+                expression { anyServiceBuildEnabled() }
             }
             steps {
                 withCredentials([
@@ -403,42 +310,13 @@ pipeline {
            PUSH IMAGES
         ========================= */
         stage('Push Images') {
-            parallel {
-
-                stage('Push api-gateway') {
-                    when { environment name: 'BUILD_API_GATEWAY', value: 'true' }
-                    steps {
-                        sh """
-                          docker push ${DOCKERHUB_USER}/${PROJECT}-api-gateway:${IMAGE_TAG}
-                        """
-                    }
-                }
-
-                stage('Push user-service') {
-                    when { environment name: 'BUILD_USER_SERVICE', value: 'true' }
-                    steps {
-                        sh "docker push ${DOCKERHUB_USER}/${PROJECT}-user-service:${IMAGE_TAG}"
-                    }
-                }
-
-                stage('Push product-service') {
-                    when { environment name: 'BUILD_PRODUCT', value: 'true' }
-                    steps {
-                        sh "docker push ${DOCKERHUB_USER}/${PROJECT}-product-service:${IMAGE_TAG}"
-                    }
-                }
-
-                stage('Push order-service') {
-                    when { environment name: 'BUILD_ORDER', value: 'true' }
-                    steps {
-                        sh "docker push ${DOCKERHUB_USER}/${PROJECT}-order-service:${IMAGE_TAG}"
-                    }
-                }
-
-                stage('Push frontend') {
-                    when { environment name: 'BUILD_FRONTEND', value: 'true' }
-                    steps {
-                        sh "docker push ${DOCKERHUB_USER}/${PROJECT}-frontend:${IMAGE_TAG}"
+            when {
+                expression { anyServiceBuildEnabled() }
+            }
+            steps {
+                script {
+                    runParallelForSelected('Push') { service ->
+                        sh "docker push ${imageRef(service)}"
                     }
                 }
             }
@@ -449,13 +327,7 @@ pipeline {
         ========================= */
         stage('Update GitOps Repo') {
             when {
-                expression {
-                    env.BUILD_API_GATEWAY  == "true" ||
-                    env.BUILD_USER_SERVICE == "true" ||
-                    env.BUILD_PRODUCT      == "true" ||
-                    env.BUILD_ORDER        == "true" ||
-                    env.BUILD_FRONTEND     == "true"
-                }
+                expression { anyServiceBuildEnabled() }
             }
             steps {
                 withCredentials([
@@ -465,36 +337,34 @@ pipeline {
                         passwordVariable: 'GIT_TOKEN'
                     )
                 ]) {
-                    sh '''
-                    rm -rf ${GITOPS_DIR}
-                    git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/NT114-Q21-Specialized-Project/kubernetes-hub.git
-                    cd ${GITOPS_DIR}
+                    script {
+                        sh '''
+                          rm -rf "${GITOPS_DIR}"
+                          REPO_NO_PROTO="${GITOPS_REPO#https://}"
+                          git clone "https://${GIT_USER}:${GIT_TOKEN}@${REPO_NO_PROTO}" "${GITOPS_DIR}"
+                        '''
 
-                    git config user.name "jenkins-ci"
-                    git config user.email "jenkins@ci.local"
+                        dir(env.GITOPS_DIR) {
+                            sh '''
+                              git config user.name "jenkins-ci"
+                              git config user.email "jenkins@ci.local"
+                            '''
 
-                    update_image () {
-                    SERVICE=$1
-                    yq e -i '.images[] |=
-                        (select(.name == "tienphatng237/mini-ecommerce-'$SERVICE'").newTag = "'$IMAGE_TAG'")' \
-                        overlays/dev/kustomization.yaml
+                            buildServices().each { service ->
+                                updateGitOpsImageTag(service)
+                            }
+
+                            sh '''
+                              if git diff --quiet; then
+                                echo "No GitOps changes"
+                                exit 0
+                              fi
+
+                              git commit -am "gitops(dev): update image tags to ${IMAGE_TAG}"
+                              git push origin main
+                            '''
+                        }
                     }
-
-                    [ "$BUILD_API_GATEWAY" = "true" ]  && update_image api-gateway
-                    [ "$BUILD_USER_SERVICE" = "true" ] && update_image user-service
-                    [ "$BUILD_PRODUCT" = "true" ]      && update_image product-service
-                    [ "$BUILD_ORDER" = "true" ]        && update_image order-service
-                    [ "$BUILD_FRONTEND" = "true" ]     && update_image frontend
-
-                    if git diff --quiet; then
-                    echo "No GitOps changes"
-                    exit 0
-                    fi
-
-                    git commit -am "gitops(dev): update image tags to ${IMAGE_TAG}"
-                    git push origin main
-
-                    '''
                 }
             }
         }
@@ -505,7 +375,10 @@ pipeline {
             sh 'docker logout || true'
         }
         success {
-            echo "✅ CI + GitOps completed. Argo CD will sync automatically."
+            script {
+                cleanupBuiltImages()
+            }
+            echo 'CI + GitOps completed. Argo CD will sync automatically.'
         }
     }
 }
