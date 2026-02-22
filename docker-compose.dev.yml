@@ -191,6 +191,34 @@ services:
       - "4318:4318"   # OTLP HTTP
 
   # =========================
+  # LOKI
+  # =========================
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: loki
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./observability/loki/loki.yml:/etc/loki/loki.yml
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+
+  # =========================
+  # PROMTAIL
+  # =========================
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: promtail
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - ./observability/promtail/promtail.yml:/etc/promtail/promtail.yml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+      - promtail_positions:/tmp
+    depends_on:
+      - loki
+
+  # =========================
   # GRAFANA
   # =========================
   grafana:
@@ -203,8 +231,12 @@ services:
       - "3000:3000"
     depends_on:
       - tempo
+      - loki
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
   
   prometheus:
     image: prom/prometheus:v2.49.1
@@ -224,3 +256,5 @@ volumes:
   product_db_data:
   order_db_data:
   grafana_data:
+  loki_data:
+  promtail_positions:
