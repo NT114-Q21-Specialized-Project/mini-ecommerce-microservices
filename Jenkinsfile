@@ -226,74 +226,50 @@ pipeline {
         }
 
         /* =========================
-           TEST CHANGED SERVICES
+           PREPARE TRIVY DB
         ========================= */
-        stage('Test Services') {
+        stage('Prepare Trivy DB') {
             when {
                 expression { anyServiceBuildEnabled() }
             }
             steps {
-                script {
-                    runParallelForSelected('Test') { service ->
-                        runServiceTest(service)
-                    }
-                }
+                sh '''
+                  mkdir -p .trivy-cache
+                  docker run --rm \
+                    -v "$PWD/.trivy-cache:/root/.cache/" \
+                    ${TRIVY_IMAGE} image --download-db-only --no-progress
+                '''
             }
         }
 
         /* =========================
-           BUILD IMAGES
+           PREPARE GITOPS REPO (ONCE)
         ========================= */
-        stage('Build Images') {
+        stage('Prepare GitOps Repo') {
             when {
                 expression { anyServiceBuildEnabled() }
             }
             steps {
-                script {
-                    runParallelForSelected('Build') { service ->
-                        sh "docker build -t ${imageRef(service)} ./${service.dir}"
-                    }
-                }
-            }
-        }
-
-        /* =========================
-           SECURITY SCAN (TRIVY)
-        ========================= */
-        stage('Security Scan (Trivy)') {
-            when {
-                expression { anyServiceBuildEnabled() }
-            }
-            stages {
-                stage('Update Trivy DB') {
-                    steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github-token',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )
+                ]) {
+                    script {
                         sh '''
-                          mkdir -p .trivy-cache
-                          docker run --rm \
-                            -v "$PWD/.trivy-cache:/root/.cache/" \
-                            ${TRIVY_IMAGE} image --download-db-only --no-progress
+                          rm -rf "${GITOPS_DIR}"
+                          REPO_NO_PROTO="${GITOPS_REPO#https://}"
+                          git clone "https://${GIT_USER}:${GIT_TOKEN}@${REPO_NO_PROTO}" "${GITOPS_DIR}"
                         '''
-                    }
-                }
 
-                stage('Scan Images') {
-                    steps {
-                        script {
-                            runParallelForSelected('Scan') { service ->
-                                sh """
-                                  docker run --rm \
-                                    -v /var/run/docker.sock:/var/run/docker.sock \
-                                    -v "\$PWD/.trivy-cache:/root/.cache/" \
-                                    ${env.TRIVY_IMAGE} image \
-                                    --no-progress \
-                                    --skip-db-update \
-                                    --scanners vuln \
-                                    --severity ${env.TRIVY_SEVERITY} \
-                                    --exit-code ${env.TRIVY_EXIT_CODE} \
-                                    --ignore-unfixed=${env.TRIVY_IGNORE_UNFIXED} \
-                                    ${imageRef(service)}
-                                """
-                            }
+                        dir(env.GITOPS_DIR) {
+                            sh '''
+                              git config user.name "jenkins-ci"
+                              git config user.email "jenkins@ci.local"
+                            '''
+                            stash name: 'gitops-repo', includes: '**', useDefaultExcludes: false
                         }
                     }
                 }
@@ -321,64 +297,85 @@ pipeline {
         }
 
         /* =========================
-           PUSH IMAGES
+           SERVICE PIPELINES
         ========================= */
-        stage('Push Images') {
+        stage('Service Pipelines') {
             when {
                 expression { anyServiceBuildEnabled() }
             }
             steps {
                 script {
-                    runParallelForSelected('Push') { service ->
-                        sh "docker push ${imageRef(service)}"
-                    }
-                }
-            }
-        }
+                    def tasks = [:]
 
-        /* =========================
-           UPDATE GITOPS REPO
-        ========================= */
-        stage('Update GitOps Repo') {
-            when {
-                expression { anyServiceBuildEnabled() }
-            }
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'github-token',
-                        usernameVariable: 'GIT_USER',
-                        passwordVariable: 'GIT_TOKEN'
-                    )
-                ]) {
-                    script {
-                        sh '''
-                          rm -rf "${GITOPS_DIR}"
-                          REPO_NO_PROTO="${GITOPS_REPO#https://}"
-                          git clone "https://${GIT_USER}:${GIT_TOKEN}@${REPO_NO_PROTO}" "${GITOPS_DIR}"
-                        '''
+                    buildServices().each { svc ->
+                        def service = svc
+                        tasks["Service Pipeline ${service.name}"] = {
+                            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                                stage("Test ${service.name}") {
+                                    runServiceTest(service)
+                                }
 
-                        dir(env.GITOPS_DIR) {
-                            sh '''
-                              git config user.name "jenkins-ci"
-                              git config user.email "jenkins@ci.local"
-                            '''
+                                stage("Build ${service.name}") {
+                                    sh "docker build -t ${imageRef(service)} ./${service.dir}"
+                                }
 
-                            buildServices().each { service ->
-                                updateGitOpsImageTag(service)
+                                stage("Trivy Scan ${service.name}") {
+                                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                                        sh """
+                                          docker run --rm \
+                                            -v /var/run/docker.sock:/var/run/docker.sock \
+                                            -v "\$PWD/.trivy-cache:/root/.cache/" \
+                                            ${env.TRIVY_IMAGE} image \
+                                            --no-progress \
+                                            --skip-db-update \
+                                            --scanners vuln \
+                                            --severity ${env.TRIVY_SEVERITY} \
+                                            --exit-code ${env.TRIVY_EXIT_CODE} \
+                                            --ignore-unfixed=${env.TRIVY_IGNORE_UNFIXED} \
+                                            ${imageRef(service)}
+                                        """
+                                    }
+                                }
+
+                                stage("Push ${service.name}") {
+                                    sh "docker push ${imageRef(service)}"
+                                }
+
+                                stage("GitOps Update ${service.name}") {
+                                    def gitopsWorkDir = "${env.GITOPS_DIR}-${service.name}"
+                                    dir(gitopsWorkDir) {
+                                        deleteDir()
+                                        unstash 'gitops-repo'
+
+                                        sh 'git pull --rebase origin main'
+                                        updateGitOpsImageTag(service)
+
+                                        sh """
+                                          if git diff --quiet; then
+                                            echo "No GitOps changes for ${service.name}"
+                                            exit 0
+                                          fi
+
+                                          git add overlays/dev/kustomization.yaml
+                                          git commit -m "gitops(dev): update ${service.name} image to ${IMAGE_TAG}"
+                                        """
+
+                                        retry(3) {
+                                            sh 'git pull --rebase origin main'
+                                            sh 'git push origin main'
+                                        }
+                                    }
+                                }
                             }
-
-                            sh '''
-                              if git diff --quiet; then
-                                echo "No GitOps changes"
-                                exit 0
-                              fi
-
-                              git commit -am "gitops(dev): update image tags to ${IMAGE_TAG}"
-                              git push origin main
-                            '''
                         }
                     }
+
+                    if (tasks.isEmpty()) {
+                        echo 'No services selected for service pipelines.'
+                        return
+                    }
+
+                    parallel tasks
                 }
             }
         }
