@@ -27,12 +27,23 @@ querier:
     frontend_address: tempo:9095
 
 metrics_generator:
+  ring:
+    kvstore:
+      store: inmemory
   storage:
     path: /tmp/tempo/metrics
-
+    # Push span metrics + service graph metrics to Prometheus
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
   processor:
     service_graphs: {}
     span_metrics: {}
+
+# Enable metrics generator processors for the default tenant
+overrides:
+  metrics_generator_processors:
+    - service-graphs
+    - span-metrics
 
 storage:
   trace:

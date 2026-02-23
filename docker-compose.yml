@@ -81,7 +81,8 @@ services:
       DB_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required}
 
       OTEL_SERVICE_NAME: product-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_TRACES_EXPORTER: otlp
     ports:
       - "8082:8080"
@@ -125,7 +126,8 @@ services:
       HTTP_READ_TIMEOUT_MS: 5000
 
       OTEL_SERVICE_NAME: order-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_TRACES_EXPORTER: otlp
     ports:
       - "8081:8080"
@@ -151,7 +153,8 @@ services:
       SECURITY_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}
 
       OTEL_SERVICE_NAME: api-gateway
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_TRACES_EXPORTER: otlp
     ports:
       - "9000:8080"
@@ -245,6 +248,7 @@ services:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-remote-write-receiver"
 
 # =========================
 # VOLUMES
