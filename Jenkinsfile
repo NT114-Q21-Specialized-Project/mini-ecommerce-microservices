@@ -347,22 +347,24 @@ pipeline {
                                         deleteDir()
                                         unstash 'gitops-repo'
 
-                                        sh 'git pull --rebase origin main'
-                                        updateGitOpsImageTag(service)
-
-                                        sh """
-                                          if git diff --quiet; then
-                                            echo "No GitOps changes for ${service.name}"
-                                            exit 0
-                                          fi
-
-                                          git add overlays/dev/kustomization.yaml
-                                          git commit -m "gitops(dev): update ${service.name} image to ${IMAGE_TAG}"
-                                        """
-
-                                        retry(3) {
+                                        lock(resource: 'gitops-main') {
                                             sh 'git pull --rebase origin main'
-                                            sh 'git push origin main'
+                                            updateGitOpsImageTag(service)
+
+                                            sh """
+                                              if git diff --quiet; then
+                                                echo "No GitOps changes for ${service.name}"
+                                                exit 0
+                                              fi
+
+                                              git add overlays/dev/kustomization.yaml
+                                              git commit -m "gitops(dev): update ${service.name} image to ${IMAGE_TAG}"
+                                            """
+
+                                            retry(3) {
+                                                sh 'git pull --rebase origin main'
+                                                sh 'git push origin main'
+                                            }
                                         }
                                     }
                                 }
