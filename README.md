@@ -1,267 +1,290 @@
 # Mini Ecommerce Microservices
 
-## 1. Tổng quan
+## 1. Overview
 
-**Mini Ecommerce Microservices** là dự án học tập theo hướng microservices + DevOps.
-Hệ thống tách service độc lập theo đúng nguyên tắc:
+**Mini Ecommerce Microservices** is a polyglot distributed system for microservices and DevOps/AIOps practice.
 
-- Mỗi service có codebase và database riêng.
-- Giao tiếp giữa các service qua HTTP/REST.
-- Client chỉ đi qua một điểm vào là API Gateway.
+Current runtime topology:
 
-Thành phần chính:
-
+- `api-gateway` (Spring Cloud Gateway)
 - `user-service` (Go)
 - `product-service` (Spring Boot)
-- `order-service` (Spring Boot)
-- `api-gateway` (Spring Cloud Gateway)
+- `inventory-service` (Go)
+- `payment-service` (Spring Boot)
+- `order-service` (Spring Boot, Saga orchestrator)
 - `front-end` (React)
+- `redis` (async event backbone)
+- `postgres` per service database
+- `tempo`, `prometheus`, `grafana`, `loki`, `promtail`
 
-Cổng mặc định:
+Default local ports:
 
 - API Gateway: `9000`
-- User Service: `8080`
-- Product Service: `8082`
-- Order Service: `8081`
 - Front-end: `5173`
+- User Service: `8080`
+- Order Service: `8081`
+- Product Service: `8082`
+- Inventory Service: `8083`
+- Payment Service: `8084`
+- Redis: `6379`
+- Grafana: `3000`
+- Prometheus: `9090`
+- Loki: `3100`
+- Tempo: `3200` (UI API), `4317/4318` (OTLP)
 
-## 2. Mermaid kiến trúc ứng dụng
+## 2. Architecture
 
 ```mermaid
 flowchart LR
-    Client[Client\nBrowser/Curl] -->|HTTP /api/*| Gateway[API Gateway\n:9000]
+    Client[Client\nBrowser/Curl] -->|HTTP /api/*| Gateway[API Gateway :9000]
 
-    Gateway -->|/api/users| UserService[User Service\nGo :8080]
-    Gateway -->|/api/products| ProductService[Product Service\nSpring Boot :8082]
-    Gateway -->|/api/orders| OrderService[Order Service\nSpring Boot :8081]
+    Gateway -->|/api/users| UserService[User Service :8080]
+    Gateway -->|/api/products| ProductService[Product Service :8082]
+    Gateway -->|/api/inventory| InventoryService[Inventory Service :8083]
+    Gateway -->|/api/payments| PaymentService[Payment Service :8084]
+    Gateway -->|/api/orders| OrderService[Order Service :8081]
+    OrderService -->|Saga Step 1| InventoryService
+    OrderService -->|Saga Step 2| PaymentService
+    OrderService -->|Compensation| InventoryService
+    OrderService -->|Compensation| PaymentService
 
-    UserService --> UserDB[(PostgreSQL\nuser_db)]
-    ProductService --> ProductDB[(PostgreSQL\nproduct_db)]
-    OrderService --> OrderDB[(PostgreSQL\norder_db)]
+    UserService --> UserDB[(user_db)]
+    ProductService --> ProductDB[(product_db)]
+    InventoryService --> InventoryDB[(inventory_db)]
+    PaymentService --> PaymentDB[(payment_db)]
+    OrderService --> OrderDB[(order_db)]
 
-    OrderService -->|Giảm/Tăng tồn kho| ProductService
+    OrderService --> Redis[(Redis Pub/Sub)]
+    InventoryService --> Redis
+    PaymentService --> Redis
 ```
 
-## 3. Bảng API cho từng service
+## 3. Saga Workflow (Order Service)
 
-Base URL qua Gateway: `http://localhost:9000`
+Order creation uses orchestrated Saga steps:
 
-### 3.1 User Service (`/api/users`)
+1. Create order with `CREATED`
+2. Reserve inventory (`inventory-service`)
+3. Process payment (`payment-service`)
+4. Mark order `CONFIRMED` if all steps pass
+5. If any step fails, run compensation:
+   - release inventory if already reserved
+   - refund payment if already paid
+   - mark order `FAILED`
 
-| Method | Endpoint | Auth | Mô tả |
+Order statuses used in service logic:
+
+- `CREATED`
+- `INVENTORY_RESERVED`
+- `PAYMENT_PENDING`
+- `CONFIRMED`
+- `FAILED`
+- `CANCELLED`
+
+Saga step history is persisted and can be queried via:
+
+- `GET /api/orders/{id}/saga`
+
+## 4. API Surface (via Gateway)
+
+Base URL:
+
+```text
+http://localhost:9000
+```
+
+### 4.1 User Service (`/api/users`)
+
+| Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | GET | `/api/users/health` | Public | Health check |
-| POST | `/api/users` | Public | Đăng ký user mới (`CUSTOMER/SELLER/ADMIN`) |
-| POST | `/api/users/login` | Public | Đăng nhập, trả JWT |
-| GET | `/api/users` | Bearer JWT | Danh sách user active |
-| GET | `/api/users/{id}` | Bearer JWT | Lấy user theo ID |
-| GET | `/api/users/by-email?email=...` | Bearer JWT | Lấy user theo email |
-| GET | `/api/users/email-exists?email=...` | Bearer JWT | Kiểm tra email tồn tại |
-| PUT | `/api/users/{id}` | Bearer JWT | Cập nhật user |
-| PATCH | `/api/users/{id}/activate` | Bearer JWT | Kích hoạt user |
-| PATCH | `/api/users/{id}/deactivate` | Bearer JWT | Vô hiệu hóa user |
-| DELETE | `/api/users/{id}` | Bearer JWT | Soft delete user |
-| GET | `/api/users/stats` | Bearer JWT | Thống kê user |
-| GET | `/api/users/{id}/exists` | Bearer JWT | Internal: kiểm tra tồn tại |
-| GET | `/api/users/{id}/role` | Bearer JWT | Internal: lấy role |
-| GET | `/api/users/{id}/validate` | Bearer JWT | Internal: validate user |
+| POST | `/api/users` | Public | Register user (`CUSTOMER/SELLER/ADMIN`) |
+| POST | `/api/users/login` | Public | Login and get JWT |
+| GET | `/api/users` | Bearer JWT | List active users |
+| GET | `/api/users/{id}` | Bearer JWT | Get user by ID |
+| GET | `/api/users/by-email?email=...` | Bearer JWT | Get user by email |
+| GET | `/api/users/email-exists?email=...` | Bearer JWT | Check email existence |
+| PUT | `/api/users/{id}` | Bearer JWT | Update user |
+| PATCH | `/api/users/{id}/activate` | Bearer JWT | Activate user |
+| PATCH | `/api/users/{id}/deactivate` | Bearer JWT | Deactivate user |
+| DELETE | `/api/users/{id}` | Bearer JWT | Soft-delete user |
+| GET | `/api/users/stats` | Bearer JWT | User statistics |
 
-### 3.2 Product Service (`/api/products`)
+### 4.2 Product Service (`/api/products`)
 
-| Method | Endpoint | Auth | Mô tả |
+| Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/api/products` | Public | Danh sách sản phẩm |
-| GET | `/api/products/{id}` | Public | Chi tiết sản phẩm |
-| POST | `/api/products` | Bearer JWT (`SELLER/ADMIN`) | Tạo sản phẩm |
-| POST | `/api/products/{id}/decrease-stock?quantity=n` | Internal | Giảm tồn kho (order-service gọi) |
-| POST | `/api/products/{id}/increase-stock?quantity=n` | Internal | Hoàn tồn kho khi hủy đơn |
+| GET | `/api/products` | Public | List products |
+| GET | `/api/products/{id}` | Public | Get product detail |
+| POST | `/api/products` | Bearer JWT (`SELLER/ADMIN`) | Create product |
+| POST | `/api/products/{id}/decrease-stock?quantity=n` | Internal | Decrease stock |
+| POST | `/api/products/{id}/increase-stock?quantity=n` | Internal | Increase stock |
 
-### 3.3 Order Service (`/api/orders`)
+### 4.3 Inventory Service (`/api/inventory`)
 
-| Method | Endpoint | Auth | Mô tả |
+| Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| POST | `/api/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | Tạo đơn hàng (yêu cầu header `Idempotency-Key`) |
-| GET | `/api/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | Danh sách đơn của user hiện tại |
-| GET | `/api/orders?userId=<uuid>` | Bearer JWT (`ADMIN`) | Truy vấn đơn theo user |
-| PATCH | `/api/orders/{id}/cancel` | Bearer JWT (`CUSTOMER/ADMIN`) | Hủy đơn hàng |
-| GET | `/api/orders/outbox/pending?limit=20` | Bearer JWT (`ADMIN`) | Danh sách outbox pending |
+| GET | `/api/inventory/health` | Public | Health check |
+| GET | `/api/inventory/{productId}` | Bearer JWT | Check available stock |
+| POST | `/api/inventory/reserve` | Bearer JWT (`ADMIN`) | Reserve stock (supports idempotency key) |
+| POST | `/api/inventory/release` | Bearer JWT (`ADMIN`) | Release reserved stock (compensation) |
+| GET | `/api/inventory/simulate-cpu` | Bearer JWT (`ADMIN`) | CPU load simulation |
+| GET | `/api/inventory/simulate-memory` | Bearer JWT (`ADMIN`) | Memory load simulation |
 
-Ghi chú:
+### 4.4 Payment Service (`/api/payments`)
 
-- Contract OpenAPI nằm trong thư mục `api-contracts/`.
-- Với `POST /api/orders`, nếu gửi lại cùng `Idempotency-Key` + payload thì trả replay (`200`).
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/payments/health` | Public | Health check |
+| POST | `/api/payments/pay` | Bearer JWT (`ADMIN`) | Process payment (supports idempotency key) |
+| POST | `/api/payments/refund` | Bearer JWT (`ADMIN`) | Refund payment (compensation) |
+| GET | `/api/payments/order/{orderId}` | Bearer JWT (`ADMIN`) | Payment timeline by order |
+| GET | `/api/payments/simulate-cpu` | Bearer JWT (`ADMIN`) | CPU load simulation |
+| GET | `/api/payments/simulate-memory` | Bearer JWT (`ADMIN`) | Memory load simulation |
 
-## 4. Chạy nội bộ với Docker Compose
+### 4.5 Order Service (`/api/orders`)
 
-### 4.1 Chuẩn bị biến môi trường
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | Create order via Saga (requires `Idempotency-Key`) |
+| GET | `/api/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | List current user orders |
+| GET | `/api/orders?userId=<uuid>` | Bearer JWT (`ADMIN`) | Query orders by user |
+| GET | `/api/orders/{id}/saga` | Bearer JWT (`CUSTOMER/ADMIN`) | List saga steps for an order |
+| PATCH | `/api/orders/{id}/cancel` | Bearer JWT (`CUSTOMER/ADMIN`) | Cancel order + compensation |
+| GET | `/api/orders/outbox/pending?limit=20` | Bearer JWT (`ADMIN`) | Pending outbox events |
+
+## 5. Environment Variables
+
+Copy template:
 
 ```bash
 cp .env.example .env
 ```
 
-Mở `.env` và cập nhật:
+Minimal required values in `.env`:
 
 ```env
-AUTH_JWT_SECRET=<secret-dai-va-kho-doan>
-USER_DB_PASSWORD=<mat-khau-user-db>
-PRODUCT_DB_PASSWORD=<mat-khau-product-db>
-ORDER_DB_PASSWORD=<mat-khau-order-db>
+AUTH_JWT_SECRET=<long-random-secret>
+USER_DB_PASSWORD=<password>
+PRODUCT_DB_PASSWORD=<password>
+ORDER_DB_PASSWORD=<password>
+INVENTORY_DB_PASSWORD=<password>
+PAYMENT_DB_PASSWORD=<password>
 ```
 
-### 4.2 Chạy stack local
+Optional tuning (already in `.env.example`):
+
+- Payment behavior:
+  - `PAYMENT_FAILURE_PROBABILITY`
+  - `PAYMENT_DELAY_MS`
+- Saga retry/circuit breaker:
+  - `HTTP_CONNECT_TIMEOUT_MS`
+  - `HTTP_READ_TIMEOUT_MS`
+  - `SAGA_RETRY_MAX_ATTEMPTS`
+  - `SAGA_RETRY_INITIAL_BACKOFF_MS`
+  - `SAGA_CB_FAILURE_THRESHOLD`
+  - `SAGA_CB_OPEN_DURATION_MS`
+- Chaos mode:
+  - `CHAOS_MODE`
+  - `LATENCY_PROBABILITY`
+  - `ERROR_PROBABILITY`
+  - `CHAOS_DELAY_MS`
+
+## 6. Run Locally with Docker Compose
+
+Start full stack:
 
 ```bash
 docker compose up --build -d
 ```
 
-Kiểm tra trạng thái:
+Start only observability:
+
+```bash
+docker compose up -d tempo prometheus grafana loki promtail
+```
+
+Check status:
 
 ```bash
 docker compose ps
 ```
 
-Xem log realtime:
-
-```bash
-docker compose logs -f
-```
-
-### 4.3 Chạy chế độ dev compose (nếu cần)
-
-```bash
-docker compose -f docker-compose.dev.yml up --build -d
-```
-
-### 4.4 Dừng và dọn môi trường
-
-Dừng và xóa container/network:
+Stop stack:
 
 ```bash
 docker compose down
 ```
 
-Dừng và xóa cả volumes (reset dữ liệu DB local):
+Stop and remove volumes:
 
 ```bash
 docker compose down -v
 ```
 
-Nếu chạy file dev:
+## 7. API Testing
 
-```bash
-docker compose -f docker-compose.dev.yml down
-docker compose -f docker-compose.dev.yml down -v
-```
-
-## 5. Kiểm thử API
-
-Scripts kiểm thử nằm trong thư mục `api-testing/` và có thể chạy độc lập theo từng service.
-
-<details>
-<summary><strong>5.1 User Service API Test</strong></summary>
-
-Chạy test:
+Service-level smoke scripts:
 
 ```bash
 ./api-testing/user-service.sh
-```
-
-Output mẫu (đã chạy thực tế):
-
-```text
-===== USER SERVICE API TEST =====
-BASE_URL=http://localhost:9000
-SUFFIX=1771653992
-[PASS] health check (200)
-[PASS] create customer (201)
-[PASS] create seller (201)
-[PASS] create admin (201)
-[PASS] login admin (200)
-[PASS] list users (200)
-[PASS] get user by id (200)
-[PASS] get user by email (200)
-[PASS] check email exists (200)
-[PASS] update user (204)
-[PASS] internal exists (200)
-[PASS] internal role (200)
-[PASS] internal validate (200)
-[PASS] deactivate user (204)
-[PASS] activate user (204)
-[PASS] user stats (200)
-[PASS] soft delete user (204)
-[PASS] list users after delete (200)
------ SUMMARY -----
-CUSTOMER_ID=eb7f8ee6-aba7-4064-aeb2-131622271c75
-SELLER_ID=47356677-4257-47f3-ad81-fb2394b46f59
-ADMIN_ID=27eecd81-f278-4537-ae96-9079b06325b7
-USER_SERVICE_SMOKE=PASS
-```
-
-</details>
-
-<details>
-<summary><strong>5.2 Product Service API Test</strong></summary>
-
-Chạy test:
-
-```bash
 ./api-testing/product-service.sh
-```
-
-Output mẫu (đã chạy thực tế):
-
-```text
-===== PRODUCT SERVICE API TEST =====
-BASE_URL=http://localhost:9000
-SUFFIX=1771654012
-[PASS] create seller (201)
-[PASS] login seller (200)
-[PASS] create customer (201)
-[PASS] login customer (200)
-[PASS] create product by seller (201)
-[PASS] customer cannot create product (403)
-[PASS] list products (200)
-[PASS] get product by id (200)
------ SUMMARY -----
-PRODUCT_ID=6c5a2342-8818-45e0-adb4-f9a9b2556984
-PRODUCT_SERVICE_SMOKE=PASS
-```
-
-</details>
-
-<details>
-<summary><strong>5.3 Order Service API Test</strong></summary>
-
-Chạy test:
-
-```bash
+./api-testing/inventory-service.sh
+./api-testing/payment-service.sh
 ./api-testing/order-service.sh
 ```
 
-Output mẫu (đã chạy thực tế):
+Run full API suite:
 
-```text
-===== ORDER SERVICE API TEST =====
-BASE_URL=http://localhost:9000
-SUFFIX=1771654019
-[PASS] create customer (201)
-[PASS] create seller (201)
-[PASS] create admin (201)
-[PASS] login customer (200)
-[PASS] login seller (200)
-[PASS] login admin (200)
-[PASS] create product (201)
-[PASS] create order (201)
-[PASS] idempotency replay (200)
-[PASS] replay same order id
-[PASS] list my orders (200)
-[PASS] cancel order (200)
-[PASS] create order out-of-stock (400)
-[PASS] pending outbox (200)
------ SUMMARY -----
-PRODUCT_ID=aa983240-c247-45ee-a81e-af438c908fc2
-ORDER_ID=9f9c5c1e-cb61-4ae5-8d03-2b7a3dafc4d8
-ORDER_SERVICE_SMOKE=PASS
+```bash
+./api-testing/full-test.sh
 ```
 
-</details>
+If needed, override gateway URL:
+
+```bash
+BASE_URL=http://localhost:9000 ./api-testing/full-test.sh
+```
+
+## 8. CI/CD Pipeline (Jenkinsfile)
+
+The Jenkins pipeline is dynamic and matrix-driven:
+
+- Service matrix includes:
+  - `api-gateway`
+  - `user-service`
+  - `product-service`
+  - `inventory-service`
+  - `payment-service`
+  - `order-service`
+  - `frontend` (directory `front-end`)
+- Detects changed services using `git diff`.
+- Rebuilds all services when `Jenkinsfile` changes.
+- Runs stages in parallel for selected services:
+  - test
+  - build image
+  - trivy scan
+  - push image
+  - update image tags in GitOps repo (`kubernetes-hub`)
+- Cleans up built images on Jenkins worker after successful run.
+
+## 9. Observability
+
+The stack ships with:
+
+- Traces: Tempo (OTLP)
+- Metrics: Prometheus
+- Logs: Loki + Promtail
+- Dashboards: Grafana (pre-provisioned datasources/dashboards)
+
+Useful URLs:
+
+- Grafana: `http://localhost:3000` (`admin/admin`)
+- Prometheus: `http://localhost:9090`
+- Tempo API: `http://localhost:3200`
+
+## 10. Notes
+
+- API contracts are under `api-contracts/`.
+- Front-end communicates only through `api-gateway`.
+- For local browser use, CORS is configured in gateway for `http://localhost:5173`.

@@ -8,6 +8,8 @@ def getServiceMatrix() {
         [name: 'api-gateway',    dir: 'api-gateway',   flag: 'BUILD_API_GATEWAY',  image: 'api-gateway'],
         [name: 'user-service',   dir: 'user-service',  flag: 'BUILD_USER_SERVICE', image: 'user-service'],
         [name: 'product-service',dir: 'product-service', flag: 'BUILD_PRODUCT',    image: 'product-service'],
+        [name: 'inventory-service', dir: 'inventory-service', flag: 'BUILD_INVENTORY', image: 'inventory-service'],
+        [name: 'payment-service', dir: 'payment-service', flag: 'BUILD_PAYMENT', image: 'payment-service'],
         [name: 'order-service',  dir: 'order-service', flag: 'BUILD_ORDER',        image: 'order-service'],
         [name: 'frontend',       dir: 'front-end',     flag: 'BUILD_FRONTEND',     image: 'frontend']
     ]
@@ -38,6 +40,7 @@ def runServiceTest(Map service) {
     switch (service.name) {
         case 'api-gateway':
         case 'product-service':
+        case 'payment-service':
         case 'order-service':
             sh """
               docker run --rm \\
@@ -49,6 +52,7 @@ def runServiceTest(Map service) {
             break
 
         case 'user-service':
+        case 'inventory-service':
             sh """
               docker run --rm \\
                 -v "\$PWD/${service.dir}:/app" \\
@@ -185,7 +189,7 @@ pipeline {
                     echo '================= CHANGE SUMMARY ================='
                     echo "Jenkinsfile   : ${isCiChange}"
                     getServiceMatrix().each { service ->
-                        echo String.format('%-12s : %s', service.name, getEnvFlag(service.flag))
+                        echo String.format('%-18s : %s', service.name, getEnvFlag(service.flag))
                     }
                     echo "contracts    : ${getEnvFlag('BUILD_CONTRACTS')}"
                     echo '=================================================='
