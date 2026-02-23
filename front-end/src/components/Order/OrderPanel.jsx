@@ -20,25 +20,37 @@ const OrderPanel = ({ orders, loading, currentUser, onRefresh, onCancel }) => {
     return order.userId === currentUser?.id;
   };
 
+  const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+
   return (
-    <section className="glass-panel rounded-3xl border p-5 md:p-6">
+    <section className="glass-panel rounded-[32px] border p-5 md:p-6">
       <div className="mb-5 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 md:text-xl">
-          <ListOrdered className="h-5 w-5 text-cyan-600" />
-          Đơn hàng
+          <ListOrdered className="h-5 w-5 text-sky-600" />
+          Order Stream
         </h2>
         <button
           type="button"
           onClick={onRefresh}
-          className="inline-flex items-center gap-1 rounded-xl border border-cyan-200 px-3 py-2 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-50"
+          className="inline-flex items-center gap-1 rounded-2xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
         >
           <RotateCw className="h-4 w-4" />
           Làm mới
         </button>
       </div>
 
+      <div className="mb-4 rounded-3xl border border-slate-200 bg-white/80 p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Total</p>
+        <div className="mt-2 flex items-end justify-between">
+          <p className="text-2xl font-bold text-slate-900">${totalAmount.toFixed(2)}</p>
+          <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
+            {orders.length} orders
+          </span>
+        </div>
+      </div>
+
       {orders.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-8 text-center">
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white/60 p-8 text-center">
           <Clock3 className="mx-auto mb-3 h-8 w-8 text-slate-300" />
           <p className="text-sm text-slate-500">Chưa có đơn hàng nào.</p>
         </div>
@@ -47,7 +59,7 @@ const OrderPanel = ({ orders, loading, currentUser, onRefresh, onCancel }) => {
           {orders.map((order) => (
             <article
               key={order.id}
-              className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <span className="font-mono text-xs text-slate-500">{order.id?.slice(0, 8)}...</span>
