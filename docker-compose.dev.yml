@@ -1,9 +1,4 @@
-version: "3.9"
-
 services:
-  # =========================
-  # USER DATABASE
-  # =========================
   user-db:
     image: postgres:16
     container_name: user-db
@@ -14,7 +9,6 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      # Ánh xạ thư mục migrations vào thư mục init của Postgres để tự động tạo bảng & Admin
       - ./user-service/migrations:/docker-entrypoint-initdb.d
       - user_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,9 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # =========================
-  # USER SERVICE (Go)
-  # =========================
   user-service:
     build: ./user-service
     container_name: user-service
@@ -37,8 +28,6 @@ services:
       DB_PASSWORD: ${USER_DB_PASSWORD:?USER_DB_PASSWORD is required}
       JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}
       JWT_EXPIRES_MINUTES: 120
-
-      # ===== OpenTelemetry =====
       OTEL_SERVICE_NAME: user-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
       OTEL_TRACES_EXPORTER: otlp
@@ -49,9 +38,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # =========================
-  # PRODUCT DATABASE
-  # =========================
   product-db:
     image: postgres:16
     container_name: product-db
@@ -69,9 +55,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # =========================
-  # PRODUCT SERVICE (Spring Boot)
-  # =========================
   product-service:
     build: ./product-service
     container_name: product-service
@@ -79,7 +62,6 @@ services:
       DB_URL: jdbc:postgresql://product-db:5432/product_db
       DB_USER: product
       DB_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required}
-
       OTEL_SERVICE_NAME: product-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
@@ -91,9 +73,100 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # =========================
-  # ORDER DATABASE
-  # =========================
+  inventory-db:
+    image: postgres:16
+    container_name: inventory-db
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD:?INVENTORY_DB_PASSWORD is required}
+    ports:
+      - "5435:5432"
+    volumes:
+      - ./inventory-service/migrations:/docker-entrypoint-initdb.d
+      - inventory_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  inventory-service:
+    build: ./inventory-service
+    container_name: inventory-service
+    environment:
+      DB_HOST: inventory-db
+      DB_PORT: 5432
+      DB_NAME: inventory_db
+      DB_USER: inventory
+      DB_PASSWORD: ${INVENTORY_DB_PASSWORD:?INVENTORY_DB_PASSWORD is required}
+      PRODUCT_SERVICE_BASE_URL: http://product-service:8080
+      REDIS_ADDR: redis:6379
+      ORDER_EVENTS_CHANNEL: orders.events
+      CHAOS_MODE: ${CHAOS_MODE:-false}
+      LATENCY_PROBABILITY: ${LATENCY_PROBABILITY:-0.0}
+      ERROR_PROBABILITY: ${ERROR_PROBABILITY:-0.0}
+      CHAOS_DELAY_MS: ${CHAOS_DELAY_MS:-0}
+      OTEL_SERVICE_NAME: inventory-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+    ports:
+      - "8083:8080"
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  payment-db:
+    image: postgres:16
+    container_name: payment-db
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is required}
+    ports:
+      - "5436:5432"
+    volumes:
+      - ./payment-service/migrations:/docker-entrypoint-initdb.d
+      - payment_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  payment-service:
+    build: ./payment-service
+    container_name: payment-service
+    environment:
+      DB_URL: jdbc:postgresql://payment-db:5432/payment_db
+      DB_USER: payment
+      DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PAYMENT_FAILURE_PROBABILITY: ${PAYMENT_FAILURE_PROBABILITY:-0.0}
+      PAYMENT_DELAY_MS: ${PAYMENT_DELAY_MS:-250}
+      CHAOS_MODE: ${CHAOS_MODE:-false}
+      LATENCY_PROBABILITY: ${LATENCY_PROBABILITY:-0.0}
+      ERROR_PROBABILITY: ${ERROR_PROBABILITY:-0.0}
+      CHAOS_DELAY_MS: ${CHAOS_DELAY_MS:-0}
+      OTEL_SERVICE_NAME: payment-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_EXPORTER: otlp
+    ports:
+      - "8084:8080"
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
   order-db:
     image: postgres:16
     container_name: order-db
@@ -111,9 +184,16 @@ services:
       timeout: 5s
       retries: 5
 
-  # =========================
-  # ORDER SERVICE (Spring Boot)
-  # =========================
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
   order-service:
     build: ./order-service
     container_name: order-service
@@ -122,9 +202,20 @@ services:
       DB_USER: order
       DB_PASSWORD: ${ORDER_DB_PASSWORD:?ORDER_DB_PASSWORD is required}
       PRODUCT_SERVICE_BASE_URL: http://product-service:8080
-      HTTP_CONNECT_TIMEOUT_MS: 2000
-      HTTP_READ_TIMEOUT_MS: 5000
-
+      INVENTORY_SERVICE_BASE_URL: http://inventory-service:8080
+      PAYMENT_SERVICE_BASE_URL: http://payment-service:8080
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      HTTP_CONNECT_TIMEOUT_MS: ${HTTP_CONNECT_TIMEOUT_MS:-2000}
+      HTTP_READ_TIMEOUT_MS: ${HTTP_READ_TIMEOUT_MS:-5000}
+      SAGA_RETRY_MAX_ATTEMPTS: ${SAGA_RETRY_MAX_ATTEMPTS:-3}
+      SAGA_RETRY_INITIAL_BACKOFF_MS: ${SAGA_RETRY_INITIAL_BACKOFF_MS:-250}
+      SAGA_CB_FAILURE_THRESHOLD: ${SAGA_CB_FAILURE_THRESHOLD:-3}
+      SAGA_CB_OPEN_DURATION_MS: ${SAGA_CB_OPEN_DURATION_MS:-4000}
+      CHAOS_MODE: ${CHAOS_MODE:-false}
+      LATENCY_PROBABILITY: ${LATENCY_PROBABILITY:-0.0}
+      ERROR_PROBABILITY: ${ERROR_PROBABILITY:-0.0}
+      CHAOS_DELAY_MS: ${CHAOS_DELAY_MS:-0}
       OTEL_SERVICE_NAME: order-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
@@ -136,11 +227,14 @@ services:
         condition: service_healthy
       product-service:
         condition: service_started
+      inventory-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      redis:
+        condition: service_started
     restart: unless-stopped
 
-  # =========================
-  # API GATEWAY
-  # =========================
   api-gateway:
     build: ./api-gateway
     container_name: api-gateway
@@ -148,10 +242,11 @@ services:
       USER_SERVICE_URL: http://user-service:8080
       PRODUCT_SERVICE_URL: http://product-service:8080
       ORDER_SERVICE_URL: http://order-service:8080
+      INVENTORY_SERVICE_URL: http://inventory-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8080
       GATEWAY_ALLOWED_ORIGIN_PATTERN: http://localhost:5173
       SECURITY_JWT_ENABLED: "true"
       SECURITY_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}
-
       OTEL_SERVICE_NAME: api-gateway
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
@@ -162,13 +257,12 @@ services:
       - user-service
       - product-service
       - order-service
+      - inventory-service
+      - payment-service
     restart: unless-stopped
 
-  # =========================
-  # FRONT-END (React)
-  # =========================
   front-end:
-    build: 
+    build:
       context: ./front-end
       dockerfile: Dockerfile.dev
     container_name: front-end
@@ -178,9 +272,6 @@ services:
       - api-gateway
     restart: unless-stopped
 
-  # =========================
-  # TEMPO
-  # =========================
   tempo:
     image: grafana/tempo:2.4.1
     container_name: tempo
@@ -188,14 +279,11 @@ services:
     volumes:
       - ./observability/tempo/tempo.yml:/etc/tempo.yml
     ports:
-      - "3200:3200"   # HTTP API
-      - "9095:9095"   # gRPC query
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
+      - "3200:3200"
+      - "9095:9095"
+      - "4317:4317"
+      - "4318:4318"
 
-  # =========================
-  # LOKI
-  # =========================
   loki:
     image: grafana/loki:2.9.4
     container_name: loki
@@ -206,9 +294,6 @@ services:
     ports:
       - "3100:3100"
 
-  # =========================
-  # PROMTAIL
-  # =========================
   promtail:
     image: grafana/promtail:2.9.4
     container_name: promtail
@@ -221,9 +306,6 @@ services:
     depends_on:
       - loki
 
-  # =========================
-  # GRAFANA
-  # =========================
   grafana:
     image: grafana/grafana:10.3.1
     container_name: grafana
@@ -235,12 +317,13 @@ services:
     depends_on:
       - tempo
       - loki
+      - prometheus
     volumes:
       - grafana_data:/var/lib/grafana
       - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
-  
+
   prometheus:
     image: prom/prometheus:v2.49.1
     container_name: prometheus
@@ -252,13 +335,13 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--web.enable-remote-write-receiver"
 
-# =========================
-# VOLUMES
-# =========================
 volumes:
   user_db_data:
   product_db_data:
   order_db_data:
+  inventory_db_data:
+  payment_db_data:
+  redis_data:
   grafana_data:
   loki_data:
   promtail_positions:

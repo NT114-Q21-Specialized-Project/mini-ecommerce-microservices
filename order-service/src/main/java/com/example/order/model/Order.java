@@ -49,6 +49,9 @@ public class Order {
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private String idempotencyKey;
 
+    @Column(name = "failure_reason", length = 500)
+    private String failureReason;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {
@@ -126,5 +129,13 @@ public class Order {
 
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    public void setFailureReason(String failureReason) {
+        this.failureReason = failureReason;
     }
 }

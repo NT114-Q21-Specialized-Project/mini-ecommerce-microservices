@@ -11,7 +11,7 @@ const formatDate = (value) => {
 
 const OrderPanel = ({ orders, loading, currentUser, onRefresh, onCancel }) => {
   const canCancel = (order) => {
-    if (order.status !== 'CREATED') {
+    if (['CANCELLED', 'FAILED'].includes(order.status)) {
       return false;
     }
     if (currentUser?.role === 'ADMIN') {
@@ -65,9 +65,13 @@ const OrderPanel = ({ orders, loading, currentUser, onRefresh, onCancel }) => {
                 <span className="font-mono text-xs text-slate-500">{order.id?.slice(0, 8)}...</span>
                 <span
                   className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                    order.status === 'CANCELLED'
-                      ? 'bg-rose-100 text-rose-700'
-                      : 'bg-emerald-100 text-emerald-700'
+                    order.status === 'CONFIRMED'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : order.status === 'FAILED'
+                        ? 'bg-rose-100 text-rose-700'
+                        : order.status === 'CANCELLED'
+                          ? 'bg-slate-200 text-slate-700'
+                          : 'bg-amber-100 text-amber-700'
                   }`}
                 >
                   {order.status}

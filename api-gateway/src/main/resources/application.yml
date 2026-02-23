@@ -79,11 +79,31 @@ spring:
           filters:
             - StripPrefix=1
 
+        # ======================
+        # INVENTORY SERVICE (Go)
+        # ======================
+        - id: inventory-service
+          uri: ${INVENTORY_SERVICE_URL:http://inventory-service:8080}
+          predicates:
+            - Path=/api/inventory/**, /api/inventory
+          filters:
+            - StripPrefix=1
+
+        # ======================
+        # PAYMENT SERVICE (Java)
+        # ======================
+        - id: payment-service
+          uri: ${PAYMENT_SERVICE_URL:http://payment-service:8080}
+          predicates:
+            - Path=/api/payments/**, /api/payments
+          filters:
+            - StripPrefix=1
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:

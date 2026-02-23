@@ -13,12 +13,38 @@ spring:
     show-sql: ${JPA_SHOW_SQL:true}
     open-in-view: false
 
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
 clients:
   product-service:
     base-url: ${PRODUCT_SERVICE_BASE_URL:http://product-service:8080}
+  inventory-service:
+    base-url: ${INVENTORY_SERVICE_BASE_URL:http://inventory-service:8080}
+  payment-service:
+    base-url: ${PAYMENT_SERVICE_BASE_URL:http://payment-service:8080}
   http:
     connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT_MS:2000}
     read-timeout-ms: ${HTTP_READ_TIMEOUT_MS:5000}
+
+saga:
+  retry:
+    max-attempts: ${SAGA_RETRY_MAX_ATTEMPTS:3}
+    initial-backoff-ms: ${SAGA_RETRY_INITIAL_BACKOFF_MS:250}
+  circuit-breaker:
+    failure-threshold: ${SAGA_CB_FAILURE_THRESHOLD:3}
+    open-duration-ms: ${SAGA_CB_OPEN_DURATION_MS:4000}
+
+chaos:
+  mode: ${CHAOS_MODE:false}
+  latency:
+    probability: ${LATENCY_PROBABILITY:0.0}
+  error:
+    probability: ${ERROR_PROBABILITY:0.0}
+  delay:
+    ms: ${CHAOS_DELAY_MS:0}
 
 server:
   port: ${SERVER_PORT:8080}
@@ -27,7 +53,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:

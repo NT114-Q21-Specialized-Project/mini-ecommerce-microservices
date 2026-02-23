@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
+  Boxes,
+  CreditCard,
+  GitBranch,
   ListOrdered,
   Search,
   ShieldCheck,
@@ -25,7 +28,9 @@ const DEFAULT_ROUTE = '/dashboard';
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: ShoppingBag },
   { path: '/products', label: 'Products', icon: Store },
+  { path: '/inventory', label: 'Inventory', icon: Boxes },
   { path: '/orders', label: 'Orders', icon: ListOrdered, roles: ['CUSTOMER', 'ADMIN'] },
+  { path: '/saga', label: 'Saga Trace', icon: GitBranch, roles: ['CUSTOMER', 'ADMIN'] },
   { path: '/users', label: 'Users', icon: Users2 },
   { path: '/admin', label: 'Admin', icon: ShieldCheck, roles: ['ADMIN'] },
 ];
@@ -46,6 +51,11 @@ function App() {
     role: 'CUSTOMER',
   });
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [inventorySnapshots, setInventorySnapshots] = useState([]);
+  const [selectedSagaOrderId, setSelectedSagaOrderId] = useState('');
+  const [sagaSteps, setSagaSteps] = useState([]);
+  const [paymentTimeline, setPaymentTimeline] = useState([]);
+  const [sagaLoading, setSagaLoading] = useState(false);
   const [route, setRoute] = useState(() => {
     if (!window.location.hash) {
       window.location.hash = `#${DEFAULT_ROUTE}`;
@@ -116,9 +126,9 @@ function App() {
   }, [products, searchTerm]);
 
   const isRouteAllowed = (item) => !item.roles || (role && item.roles.includes(role));
-  const showSearchBar = ['/dashboard', '/products'].includes(route);
+  const showSearchBar = ['/dashboard', '/products', '/inventory'].includes(route);
   const showOrderSidebar =
-    ['/dashboard', '/products', '/users', '/admin'].includes(route) &&
+    ['/dashboard', '/products', '/inventory', '/users', '/admin'].includes(route) &&
     (role === 'CUSTOMER' || role === 'ADMIN');
 
   const renderNotAllowed = (title, subtitle) => (
@@ -177,6 +187,238 @@ function App() {
     );
   };
 
+  const fetchInventorySnapshots = async () => {
+    if (!authToken || !products.length) {
+      setInventorySnapshots([]);
+      return;
+    }
+
+    try {
+      const requests = products.slice(0, 40).map((product) =>
+        axios.get(`${GATEWAY_URL}/inventory/${product.id}`, {
+          headers: getAuthHeaders(),
+        })
+      );
+      const settled = await Promise.allSettled(requests);
+      const snapshots = settled
+        .filter((result) => result.status === 'fulfilled')
+        .map((result) => result.value.data);
+      setInventorySnapshots(snapshots);
+    } catch (err) {
+      showMsg('error', extractErrorMessage(err, 'Không thể tải inventory snapshot'));
+    }
+  };
+
+  const fetchSagaForOrder = async (orderId) => {
+    if (!orderId || !authToken) {
+      setSagaSteps([]);
+      setPaymentTimeline([]);
+      return;
+    }
+
+    setSagaLoading(true);
+    try {
+      const [stepsRes, paymentsRes] = await Promise.all([
+        axios.get(`${GATEWAY_URL}/orders/${orderId}/saga`, {
+          headers: getAuthHeaders(),
+        }),
+        role === 'ADMIN'
+          ? axios.get(`${GATEWAY_URL}/payments/order/${orderId}`, {
+              headers: getAuthHeaders(),
+            })
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      setSagaSteps(Array.isArray(stepsRes.data) ? stepsRes.data : []);
+      setPaymentTimeline(Array.isArray(paymentsRes.data) ? paymentsRes.data : []);
+    } catch (err) {
+      showMsg('error', extractErrorMessage(err, 'Không thể tải saga trace'));
+    } finally {
+      setSagaLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (route !== '/inventory') {
+      return;
+    }
+    fetchInventorySnapshots();
+  }, [route, products, authToken]);
+
+  useEffect(() => {
+    if (route !== '/saga') {
+      return;
+    }
+    if (!orders.length) {
+      setSelectedSagaOrderId('');
+      setSagaSteps([]);
+      setPaymentTimeline([]);
+      return;
+    }
+
+    const exists = orders.some((order) => order.id === selectedSagaOrderId);
+    const nextOrderId = exists ? selectedSagaOrderId : orders[0]?.id;
+    if (!nextOrderId) {
+      return;
+    }
+    setSelectedSagaOrderId(nextOrderId);
+    fetchSagaForOrder(nextOrderId);
+  }, [route, orders, selectedSagaOrderId, authToken]);
+
+  const renderInventoryView = () => {
+    const stockMap = new Map();
+    inventorySnapshots.forEach((item) => {
+      stockMap.set(item.productId, item.availableStock);
+    });
+
+    return (
+      <section className="glass-panel rounded-[32px] border p-5 md:p-6">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 md:text-xl">
+            <Boxes className="h-5 w-5 text-sky-600" />
+            Inventory Snapshot
+          </h2>
+          <button
+            type="button"
+            onClick={fetchInventorySnapshots}
+            className="rounded-2xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
+          >
+            Refresh Inventory
+          </button>
+        </div>
+
+        {products.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-8 text-center text-sm text-slate-500">
+            Chưa có sản phẩm để hiển thị tồn kho.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {products.map((product) => (
+              <article key={product.id} className="rounded-3xl border border-slate-200 bg-white/80 p-4">
+                <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
+                <p className="mt-1 text-xs text-slate-500">Product ID: {product.id?.slice(0, 8)}...</p>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-lg font-bold text-slate-900">${Number(product.price || 0).toFixed(2)}</span>
+                  <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
+                    Stock: {stockMap.has(product.id) ? stockMap.get(product.id) : product.stock}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  };
+
+  const renderSagaView = () => (
+    <section className="glass-panel rounded-[32px] border p-5 md:p-6">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 md:text-xl">
+          <GitBranch className="h-5 w-5 text-sky-600" />
+          Saga Trace Explorer
+        </h2>
+        <button
+          type="button"
+          onClick={() => selectedSagaOrderId && fetchSagaForOrder(selectedSagaOrderId)}
+          className="rounded-2xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
+          disabled={!selectedSagaOrderId}
+        >
+          Refresh Trace
+        </button>
+      </div>
+
+      {orders.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-8 text-center text-sm text-slate-500">
+          Chưa có order để hiển thị saga.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <aside className="space-y-2 rounded-3xl border border-slate-200 bg-white/70 p-3">
+            {orders.slice(0, 20).map((order) => (
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => {
+                  setSelectedSagaOrderId(order.id);
+                  fetchSagaForOrder(order.id);
+                }}
+                className={`w-full rounded-2xl border px-3 py-2 text-left text-xs transition ${
+                  selectedSagaOrderId === order.id
+                    ? 'border-sky-300 bg-sky-50 text-sky-800'
+                    : 'border-transparent bg-white text-slate-600 hover:border-sky-200'
+                }`}
+              >
+                <p className="font-mono text-[11px]">{order.id?.slice(0, 8)}...</p>
+                <p className="mt-1 font-semibold">{order.status}</p>
+              </button>
+            ))}
+          </aside>
+
+          <div className="space-y-4">
+            <div className="rounded-3xl border border-slate-200 bg-white/80 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Saga Steps</p>
+              {sagaLoading ? (
+                <p className="text-sm text-slate-500">Loading saga steps...</p>
+              ) : sagaSteps.length === 0 ? (
+                <p className="text-sm text-slate-500">Không có step cho order này.</p>
+              ) : (
+                <div className="space-y-2">
+                  {sagaSteps.map((step) => (
+                    <div key={step.id} className="rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-slate-900">{step.stepName}</p>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            step.stepStatus === 'SUCCESS'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : step.stepStatus === 'RETRY_FAILED'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-rose-100 text-rose-700'
+                          }`}
+                        >
+                          {step.stepStatus}
+                        </span>
+                      </div>
+                      <p className="mt-1">retry: {step.retryCount} · compensation: {step.compensation ? 'yes' : 'no'}</p>
+                      <p className="mt-1 text-slate-500">{step.detail || '-'}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white/80 p-4">
+              <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                <CreditCard className="h-4 w-4 text-sky-600" />
+                Payment Timeline
+              </p>
+              {paymentTimeline.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  {role === 'ADMIN' ? 'No payment events for this order.' : 'Payment timeline is visible for admin only.'}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {paymentTimeline.map((row) => (
+                    <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-slate-900">{row.operationType}</p>
+                        <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                          {row.status}
+                        </span>
+                      </div>
+                      <p className="mt-1">${Number(row.amount || 0).toFixed(2)} {row.currency}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+
   useEffect(() => {
     const handleHashChange = () => {
       setRoute(window.location.hash.replace('#', '') || DEFAULT_ROUTE);
@@ -206,6 +448,8 @@ function App() {
             onOpenAddModal={() => setIsProductModalOpen(true)}
           />
         );
+      case '/inventory':
+        return renderInventoryView();
       case '/orders':
         if (role === 'CUSTOMER' || role === 'ADMIN') {
           return (
@@ -219,6 +463,11 @@ function App() {
           );
         }
         return renderNotAllowed('Orders not available', 'Only customers or admins can access orders.');
+      case '/saga':
+        if (role === 'CUSTOMER' || role === 'ADMIN') {
+          return renderSagaView();
+        }
+        return renderNotAllowed('Saga trace not available', 'Only customers or admins can access saga traces.');
       case '/users':
         return renderUsersView();
       case '/admin':

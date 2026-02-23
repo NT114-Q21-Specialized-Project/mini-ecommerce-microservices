@@ -5,3 +5,12 @@ scrape_configs:
   - job_name: "tempo"
     static_configs:
       - targets: ["tempo:3200"]
+
+  - job_name: "spring-services"
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - "api-gateway:8080"
+          - "product-service:8080"
+          - "order-service:8080"
+          - "payment-service:8080"

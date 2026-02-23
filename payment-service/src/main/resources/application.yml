@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: payment-service
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://payment-db:5432/payment_db}
+    username: ${DB_USER:payment}
+    password: ${DB_PASSWORD:paymentpass}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:false}
+    open-in-view: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+payment:
+  failure:
+    probability: ${PAYMENT_FAILURE_PROBABILITY:0.0}
+  delay:
+    ms: ${PAYMENT_DELAY_MS:200}
+
+chaos:
+  mode: ${CHAOS_MODE:false}
+  latency:
+    probability: ${LATENCY_PROBABILITY:0.0}
+  error:
+    probability: ${ERROR_PROBABILITY:0.0}
+  delay:
+    ms: ${CHAOS_DELAY_MS:0}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://tempo:4318/v1/traces}

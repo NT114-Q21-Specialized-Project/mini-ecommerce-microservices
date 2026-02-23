@@ -113,9 +113,53 @@ code=$(request GET "/api/orders" "$TMP_DIR/order_list.out" \
   -H "Authorization: Bearer $CUSTOMER_TOKEN")
 assert_code "$code" "200" "list my orders" "$TMP_DIR/order_list.out"
 
+code=$(request GET "/api/orders/$ORDER_ID/saga" "$TMP_DIR/order_saga_customer.out" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN")
+assert_code "$code" "200" "get saga steps (customer)" "$TMP_DIR/order_saga_customer.out"
+
+if ! jq -e 'map(.stepName) | index("ORDER_CREATED") != null' "$TMP_DIR/order_saga_customer.out" >/dev/null; then
+  echo "[FAIL] saga steps missing ORDER_CREATED"
+  cat "$TMP_DIR/order_saga_customer.out" || true
+  exit 1
+fi
+echo "[PASS] saga contains ORDER_CREATED"
+
+code=$(request GET "/api/payments/order/$ORDER_ID" "$TMP_DIR/payment_timeline_before_cancel.out" \
+  -H "Authorization: Bearer $ADMIN_TOKEN")
+assert_code "$code" "200" "get payment timeline (admin)" "$TMP_DIR/payment_timeline_before_cancel.out"
+
+if ! jq -e 'length > 0' "$TMP_DIR/payment_timeline_before_cancel.out" >/dev/null; then
+  echo "[FAIL] payment timeline is empty before cancel"
+  cat "$TMP_DIR/payment_timeline_before_cancel.out" || true
+  exit 1
+fi
+echo "[PASS] payment timeline has transactions"
+
 code=$(request PATCH "/api/orders/$ORDER_ID/cancel" "$TMP_DIR/order_cancel.out" \
   -H "Authorization: Bearer $CUSTOMER_TOKEN")
 assert_code "$code" "200" "cancel order" "$TMP_DIR/order_cancel.out"
+
+code=$(request GET "/api/orders/$ORDER_ID/saga" "$TMP_DIR/order_saga_after_cancel.out" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN")
+assert_code "$code" "200" "get saga after cancel (customer)" "$TMP_DIR/order_saga_after_cancel.out"
+
+if ! jq -e 'map(.stepName) | index("ORDER_CANCELLED") != null' "$TMP_DIR/order_saga_after_cancel.out" >/dev/null; then
+  echo "[FAIL] saga steps missing ORDER_CANCELLED"
+  cat "$TMP_DIR/order_saga_after_cancel.out" || true
+  exit 1
+fi
+echo "[PASS] saga contains ORDER_CANCELLED"
+
+code=$(request GET "/api/payments/order/$ORDER_ID" "$TMP_DIR/payment_timeline_after_cancel.out" \
+  -H "Authorization: Bearer $ADMIN_TOKEN")
+assert_code "$code" "200" "get payment timeline after cancel (admin)" "$TMP_DIR/payment_timeline_after_cancel.out"
+
+if ! jq -e 'map(.operationType) | index("REFUND") != null' "$TMP_DIR/payment_timeline_after_cancel.out" >/dev/null; then
+  echo "[FAIL] payment timeline missing REFUND after cancel"
+  cat "$TMP_DIR/payment_timeline_after_cancel.out" || true
+  exit 1
+fi
+echo "[PASS] payment timeline contains REFUND after cancel"
 
 code=$(request POST "/api/orders" "$TMP_DIR/order_out_of_stock.out" \
   -H 'Content-Type: application/json' \

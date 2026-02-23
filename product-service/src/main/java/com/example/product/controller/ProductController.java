@@ -98,7 +98,7 @@ public class ProductController {
             @RequestHeader(value = "X-Internal-Caller", required = false) String caller,
             @RequestParam int quantity
     ) {
-        if (!"order-service".equalsIgnoreCase(caller)) {
+        if (!isAllowedInternalCaller(caller)) {
             return ResponseEntity
                     .status(HttpStatus.FORBIDDEN)
                     .body("Forbidden internal endpoint");
@@ -121,7 +121,7 @@ public class ProductController {
             @RequestHeader(value = "X-Internal-Caller", required = false) String caller,
             @RequestParam int quantity
     ) {
-        if (!"order-service".equalsIgnoreCase(caller)) {
+        if (!isAllowedInternalCaller(caller)) {
             return ResponseEntity
                     .status(HttpStatus.FORBIDDEN)
                     .body("Forbidden internal endpoint");
@@ -135,5 +135,12 @@ public class ProductController {
                     .status(HttpStatus.BAD_REQUEST)
                     .body(e.getMessage());
         }
+    }
+
+    private boolean isAllowedInternalCaller(String caller) {
+        if (caller == null || caller.isBlank()) {
+            return false;
+        }
+        return "order-service".equalsIgnoreCase(caller) || "inventory-service".equalsIgnoreCase(caller);
     }
 }

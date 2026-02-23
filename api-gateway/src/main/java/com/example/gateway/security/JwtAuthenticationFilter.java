@@ -100,6 +100,14 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return true;
         }
 
+        if ("/api/inventory/health".equals(path)) {
+            return true;
+        }
+
+        if ("/api/payments/health".equals(path)) {
+            return true;
+        }
+
         if ("/api/users/login".equals(path) && HttpMethod.POST.equals(method)) {
             return true;
         }
@@ -117,6 +125,19 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         if (path.matches("^/api/products/[^/]+/(decrease-stock|increase-stock)$")) {
             return false;
+        }
+
+        if (path.startsWith("/api/inventory")) {
+            if (HttpMethod.GET.equals(method)) {
+                return "CUSTOMER".equalsIgnoreCase(role)
+                        || "SELLER".equalsIgnoreCase(role)
+                        || "ADMIN".equalsIgnoreCase(role);
+            }
+            return "ADMIN".equalsIgnoreCase(role);
+        }
+
+        if (path.startsWith("/api/payments")) {
+            return "ADMIN".equalsIgnoreCase(role);
         }
 
         if (path.startsWith("/api/products") && HttpMethod.POST.equals(method)) {
