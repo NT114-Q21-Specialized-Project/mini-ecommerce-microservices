@@ -305,6 +305,7 @@ pipeline {
             }
             steps {
                 script {
+                    echo 'Note: GitOps updates are serialized via lock to avoid push conflicts.'
                     def tasks = [:]
 
                     buildServices().each { svc ->
