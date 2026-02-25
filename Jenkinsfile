@@ -107,15 +107,15 @@ def cleanupBuiltImages() {
 
     if (images.isEmpty()) {
         echo 'No built images to clean up.'
-        return
+    } else {
+        images.each { img ->
+            sh "docker image rm -f ${img} || true"
+        }
     }
 
-    images.each { img ->
-        sh "docker image rm -f ${img} || true"
-    }
-
-    // Remove dangling layers to keep Jenkins workers clean.
+    // Remove dangling layers and older resources to keep Jenkins workers clean.
     sh 'docker image prune -f || true'
+    sh 'docker system prune -f --filter "until=24h" || true'
     sh 'rm -rf .trivy-cache || true'
 }
 
@@ -386,12 +386,12 @@ pipeline {
 
     post {
         always {
-            sh 'docker logout || true'
-        }
-        success {
             script {
                 cleanupBuiltImages()
             }
+            sh 'docker logout || true'
+        }
+        success {
             echo 'CI + GitOps completed. Argo CD will sync automatically.'
         }
     }
