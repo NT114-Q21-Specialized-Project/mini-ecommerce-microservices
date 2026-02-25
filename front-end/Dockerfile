@@ -1,5 +1,5 @@
 # ===== Build stage =====
-FROM node:20-alpine AS builder
+FROM node:20-alpine3.23 AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,10 @@ COPY . .
 RUN npm run build
 
 # ===== Runtime stage =====
-FROM nginx:alpine
+FROM nginx:alpine3.23
+
+# Pull in latest security fixes from the Alpine repo
+RUN apk update && apk upgrade --no-cache
 
 # Copy static files từ builder
 COPY --from=builder /app/dist /usr/share/nginx/html
