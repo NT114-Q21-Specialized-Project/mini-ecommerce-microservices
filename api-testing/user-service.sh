@@ -45,7 +45,7 @@ echo "SUFFIX=$SUFFIX"
 
 CUSTOMER_EMAIL="customer_${SUFFIX}@test.com"
 SELLER_EMAIL="seller_${SUFFIX}@test.com"
-ADMIN_EMAIL="admin_${SUFFIX}@test.com"
+REJECT_ADMIN_EMAIL="admin_${SUFFIX}@test.com"
 
 code=$(request GET "/api/users/health" "$TMP_DIR/health.out")
 assert_code "$code" "200" "health check" "$TMP_DIR/health.out"
@@ -64,15 +64,15 @@ SELLER_ID="$(jq -r '.id' "$TMP_DIR/seller_create.out")"
 
 code=$(request POST "/api/users" "$TMP_DIR/admin_create.out" \
   -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Admin ${SUFFIX}\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"ADMIN\"}")
-assert_code "$code" "201" "create admin" "$TMP_DIR/admin_create.out"
-ADMIN_ID="$(jq -r '.id' "$TMP_DIR/admin_create.out")"
+  -d "{\"name\":\"Admin ${SUFFIX}\",\"email\":\"$REJECT_ADMIN_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"ADMIN\"}")
+assert_code "$code" "400" "reject admin self-register" "$TMP_DIR/admin_create.out"
 
 code=$(request POST "/api/users/login" "$TMP_DIR/admin_login.out" \
   -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\"}")
-assert_code "$code" "200" "login admin" "$TMP_DIR/admin_login.out"
+  -d '{"email":"admin@ems.com","password":"admin123"}')
+assert_code "$code" "200" "login seeded admin" "$TMP_DIR/admin_login.out"
 ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_login.out")"
+ADMIN_ID="$(jq -r '.user.id' "$TMP_DIR/admin_login.out")"
 
 AUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
 

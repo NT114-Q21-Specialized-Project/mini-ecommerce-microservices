@@ -45,7 +45,7 @@ echo "SUFFIX=$SUFFIX"
 
 CUSTOMER_EMAIL="order_customer_${SUFFIX}@test.com"
 SELLER_EMAIL="order_seller_${SUFFIX}@test.com"
-ADMIN_EMAIL="order_admin_${SUFFIX}@test.com"
+REJECT_ADMIN_EMAIL="order_admin_${SUFFIX}@test.com"
 
 code=$(request POST "/api/users" "$TMP_DIR/customer_create.out" \
   -H 'Content-Type: application/json' \
@@ -59,8 +59,8 @@ assert_code "$code" "201" "create seller" "$TMP_DIR/seller_create.out"
 
 code=$(request POST "/api/users" "$TMP_DIR/admin_create.out" \
   -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Order Admin ${SUFFIX}\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"ADMIN\"}")
-assert_code "$code" "201" "create admin" "$TMP_DIR/admin_create.out"
+  -d "{\"name\":\"Order Admin ${SUFFIX}\",\"email\":\"$REJECT_ADMIN_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"ADMIN\"}")
+assert_code "$code" "400" "reject admin self-register" "$TMP_DIR/admin_create.out"
 
 code=$(request POST "/api/users/login" "$TMP_DIR/customer_login.out" \
   -H 'Content-Type: application/json' \
@@ -76,8 +76,8 @@ SELLER_TOKEN="$(jq -r '.access_token' "$TMP_DIR/seller_login.out")"
 
 code=$(request POST "/api/users/login" "$TMP_DIR/admin_login.out" \
   -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\"}")
-assert_code "$code" "200" "login admin" "$TMP_DIR/admin_login.out"
+  -d '{"email":"admin@ems.com","password":"admin123"}')
+assert_code "$code" "200" "login seeded admin" "$TMP_DIR/admin_login.out"
 ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_login.out")"
 
 code=$(request POST "/api/products" "$TMP_DIR/product_create.out" \

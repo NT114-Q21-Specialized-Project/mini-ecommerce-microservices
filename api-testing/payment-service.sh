@@ -66,7 +66,7 @@ echo "BASE_URL=$BASE_URL"
 echo "SUFFIX=$SUFFIX"
 
 CUSTOMER_EMAIL="payment_customer_${SUFFIX}@test.com"
-ADMIN_EMAIL="payment_admin_${SUFFIX}@test.com"
+REJECT_ADMIN_EMAIL="payment_admin_${SUFFIX}@test.com"
 ORDER_ID="$(new_uuid)"
 
 code=$(request GET "/api/payments/health" "$TMP_DIR/health.out")
@@ -80,8 +80,8 @@ CUSTOMER_ID="$(jq -r '.id' "$TMP_DIR/customer_create.out")"
 
 code=$(request POST "/api/users" "$TMP_DIR/admin_create.out" \
   -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Payment Admin ${SUFFIX}\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"ADMIN\"}")
-assert_code "$code" "201" "create admin" "$TMP_DIR/admin_create.out"
+  -d "{\"name\":\"Payment Admin ${SUFFIX}\",\"email\":\"$REJECT_ADMIN_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"ADMIN\"}")
+assert_code "$code" "400" "reject admin self-register" "$TMP_DIR/admin_create.out"
 
 code=$(request POST "/api/users/login" "$TMP_DIR/customer_login.out" \
   -H 'Content-Type: application/json' \
@@ -91,8 +91,8 @@ CUSTOMER_TOKEN="$(jq -r '.access_token' "$TMP_DIR/customer_login.out")"
 
 code=$(request POST "/api/users/login" "$TMP_DIR/admin_login.out" \
   -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\"}")
-assert_code "$code" "200" "login admin" "$TMP_DIR/admin_login.out"
+  -d '{"email":"admin@ems.com","password":"admin123"}')
+assert_code "$code" "200" "login seeded admin" "$TMP_DIR/admin_login.out"
 ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_login.out")"
 
 PAY_KEY="payment-pay-${SUFFIX}"

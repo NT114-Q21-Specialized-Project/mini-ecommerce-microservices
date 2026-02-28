@@ -16,7 +16,7 @@ INSERT INTO users (name, email, password, role, is_active)
 VALUES (
     'Super Admin', 
     'admin@ems.com', 
-    '$2a$10$fV3zI.Mpt5U/8H5F4E4ELe7mX.qO6I5FvL/pL1.A.v6E.qO6I5FvL', 
+    '$2a$10$OmJIqSDrey9VXzwNocVg4.UUw7HemEojckkc87jjJcwFr1mFQJWPe', 
     'ADMIN', 
     true
 ) ON CONFLICT (email) DO NOTHING;
