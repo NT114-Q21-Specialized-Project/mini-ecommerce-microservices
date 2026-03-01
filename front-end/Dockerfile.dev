@@ -15,5 +15,8 @@ COPY . .
 # Expose port cho Vite dev server
 EXPOSE 5173
 
+# Vite dev proxy target when running inside docker-compose network
+ENV VITE_DEV_PROXY_TARGET=http://api-gateway:8080
+
 # Chạy với host 0.0.0.0 để Docker map được port ra ngoài
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

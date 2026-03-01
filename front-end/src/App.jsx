@@ -21,7 +21,7 @@ import ProductList from './components/Product/ProductList';
 import ProductForm from './components/Product/ProductForm';
 import OrderPanel from './components/Order/OrderPanel';
 
-const GATEWAY_URL = 'http://localhost:9000/api';
+const GATEWAY_URL = (import.meta.env.VITE_GATEWAY_URL || '/api').replace(/\/$/, '');
 const SESSION_STORAGE_KEY = 'mini-ecom-session';
 const DEFAULT_ROUTE = '/dashboard';
 
@@ -493,8 +493,11 @@ function App() {
     if (typeof payload === 'string') {
       return payload;
     }
-    if (payload?.error) {
+    if (typeof payload?.error === 'string') {
       return payload.error;
+    }
+    if (payload?.error?.message) {
+      return payload.error.message;
     }
     if (payload?.message) {
       return payload.message;
@@ -511,7 +514,17 @@ function App() {
       const res = await axios.get(`${GATEWAY_URL}/users`, {
         headers: getAuthHeaders(),
       });
-      setUsers(Array.isArray(res.data) ? res.data : []);
+      if (Array.isArray(res.data)) {
+        setUsers(res.data);
+        return;
+      }
+
+      if (Array.isArray(res.data?.items)) {
+        setUsers(res.data.items);
+        return;
+      }
+
+      setUsers([]);
     } catch (err) {
       showMsg('error', extractErrorMessage(err, 'Không thể tải danh sách user'));
     }

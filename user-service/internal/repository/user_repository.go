@@ -2,11 +2,33 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/lib/pq"
+
 	"user-service/internal/model"
 )
+
+var (
+	ErrUserNotFound  = errors.New("user not found")
+	ErrEmailConflict = errors.New("email already exists")
+)
+
+type ListUsersParams struct {
+	Page      int
+	PageSize  int
+	Role      string
+	Search    string
+	SortBy    string
+	SortOrder string
+}
+
+type ListUsersResult struct {
+	Items []model.User
+	Total int
+}
 
 type UserRepository struct {
 	db *sql.DB
@@ -16,45 +38,82 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-// =========================
-// FIND ALL USERS
-// =========================
-func (r *UserRepository) FindAll() ([]model.User, error) {
-	rows, err := r.db.Query(`
+func (r *UserRepository) ListActiveUsers(params ListUsersParams) (ListUsersResult, error) {
+	filters := []string{"is_active = true"}
+	args := []any{}
+	argPos := 1
+
+	if params.Role != "" {
+		filters = append(filters, fmt.Sprintf("role = $%d", argPos))
+		args = append(args, params.Role)
+		argPos++
+	}
+
+	if params.Search != "" {
+		filters = append(filters, fmt.Sprintf("(name ILIKE $%d OR email ILIKE $%d)", argPos, argPos))
+		args = append(args, "%"+params.Search+"%")
+		argPos++
+	}
+
+	whereClause := "WHERE " + strings.Join(filters, " AND ")
+
+	var total int
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM users %s", whereClause)
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return ListUsersResult{}, err
+	}
+
+	query := fmt.Sprintf(`
         SELECT id, name, email, role, is_active, created_at
         FROM users
-        WHERE is_active = true
-    `)
+        %s
+        ORDER BY %s %s, id ASC
+        LIMIT $%d OFFSET $%d
+    `,
+		whereClause,
+		normalizeSortBy(params.SortBy),
+		normalizeSortOrder(params.SortOrder),
+		argPos,
+		argPos+1,
+	)
+
+	offset := (params.Page - 1) * params.PageSize
+	dataArgs := append(append([]any{}, args...), params.PageSize, offset)
+
+	rows, err := r.db.Query(query, dataArgs...)
 	if err != nil {
-		return nil, err
+		return ListUsersResult{}, err
 	}
 	defer rows.Close()
 
-	users := []model.User{}
-
+	items := []model.User{}
 	for rows.Next() {
-		var u model.User
+		var user model.User
 		if err := rows.Scan(
-			&u.ID,
-			&u.Name,
-			&u.Email,
-			&u.Role,
-			&u.IsActive,
-			&u.CreatedAt,
+			&user.ID,
+			&user.Name,
+			&user.Email,
+			&user.Role,
+			&user.IsActive,
+			&user.CreatedAt,
 		); err != nil {
-			return nil, err
+			return ListUsersResult{}, err
 		}
-		users = append(users, u)
+		items = append(items, user)
 	}
 
-	return users, nil
+	if err := rows.Err(); err != nil {
+		return ListUsersResult{}, err
+	}
+
+	return ListUsersResult{
+		Items: items,
+		Total: total,
+	}, nil
 }
 
-// =========================
-// CREATE USER (UPDATED TO INCLUDE PASSWORD)
-// =========================
 func (r *UserRepository) Create(user *model.User) error {
-	return r.db.QueryRow(
+	err := r.db.QueryRow(
 		`
         INSERT INTO users (name, email, password, role, is_active)
         VALUES ($1, $2, $3, $4, true)
@@ -65,13 +124,18 @@ func (r *UserRepository) Create(user *model.User) error {
 		user.Password,
 		user.Role,
 	).Scan(&user.ID, &user.CreatedAt, &user.IsActive)
+	if err != nil {
+		if isUniqueEmailError(err) {
+			return ErrEmailConflict
+		}
+		return err
+	}
+
+	return nil
 }
 
-// =========================
-// FIND BY EMAIL (NEW FOR LOGIN)
-// =========================
 func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
-	var u model.User
+	var user model.User
 	err := r.db.QueryRow(
 		`
         SELECT id, name, email, password, role, is_active, created_at
@@ -80,30 +144,27 @@ func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
         `,
 		email,
 	).Scan(
-		&u.ID,
-		&u.Name,
-		&u.Email,
-		&u.Password,
-		&u.Role,
-		&u.IsActive,
-		&u.CreatedAt,
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.Password,
+		&user.Role,
+		&user.IsActive,
+		&user.CreatedAt,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &u, nil
+
+	return &user, nil
 }
 
-// =========================
-// FIND USER BY ID
-// =========================
 func (r *UserRepository) FindByID(id string) (*model.User, error) {
-	var u model.User
-
+	var user model.User
 	err := r.db.QueryRow(
 		`
         SELECT id, name, email, role, is_active, created_at
@@ -112,36 +173,32 @@ func (r *UserRepository) FindByID(id string) (*model.User, error) {
         `,
 		id,
 	).Scan(
-		&u.ID,
-		&u.Name,
-		&u.Email,
-		&u.Role,
-		&u.IsActive,
-		&u.CreatedAt,
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.Role,
+		&user.IsActive,
+		&user.CreatedAt,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	return &u, nil
+	return &user, nil
 }
 
-// =========================
-// FIND USER ROLE
-// =========================
 func (r *UserRepository) FindRoleByID(id string) (string, error) {
 	var role string
-
 	err := r.db.QueryRow(
 		`SELECT role FROM users WHERE id = $1 AND is_active = true`,
 		id,
 	).Scan(&role)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	if err != nil {
@@ -151,58 +208,73 @@ func (r *UserRepository) FindRoleByID(id string) (string, error) {
 	return role, nil
 }
 
-// =========================
-// UPDATE USER (PARTIAL UPDATE)
-// =========================
 func (r *UserRepository) Update(id, name, email string) error {
 	if name == "" && email == "" {
 		return nil
 	}
 
-	query := `UPDATE users SET`
+	query := "UPDATE users SET"
 	args := []any{}
-	i := 1
+	argPos := 1
 
 	if name != "" {
-		query += fmt.Sprintf(" name = $%d,", i)
+		query += fmt.Sprintf(" name = $%d,", argPos)
 		args = append(args, name)
-		i++
+		argPos++
 	}
 
 	if email != "" {
-		query += fmt.Sprintf(" email = $%d,", i)
+		query += fmt.Sprintf(" email = $%d,", argPos)
 		args = append(args, email)
-		i++
+		argPos++
 	}
 
 	query = strings.TrimSuffix(query, ",")
-
-	query += fmt.Sprintf(" WHERE id = $%d AND is_active = true", i)
+	query += fmt.Sprintf(" WHERE id = $%d AND is_active = true", argPos)
 	args = append(args, id)
 
-	_, err := r.db.Exec(query, args...)
-	return err
+	result, err := r.db.Exec(query, args...)
+	if err != nil {
+		if isUniqueEmailError(err) {
+			return ErrEmailConflict
+		}
+		return err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
 }
 
-// =========================
-// SOFT DELETE USER
-// =========================
 func (r *UserRepository) SoftDelete(id string) error {
-	_, err := r.db.Exec(`
+	result, err := r.db.Exec(`
         UPDATE users
         SET is_active = false
-        WHERE id = $1
+        WHERE id = $1 AND is_active = true
     `, id)
+	if err != nil {
+		return err
+	}
 
-	return err
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
 }
 
-// =========================
-// USER EXISTS
-// =========================
 func (r *UserRepository) Exists(id string) (bool, error) {
 	var exists bool
-
 	err := r.db.QueryRow(`
         SELECT EXISTS (
             SELECT 1 FROM users WHERE id = $1 AND is_active = true
@@ -212,41 +284,33 @@ func (r *UserRepository) Exists(id string) (bool, error) {
 	return exists, err
 }
 
-// =========================
-// FIND USER BY EMAIL (PUBLIC - NO PASSWORD)
-// =========================
 func (r *UserRepository) FindByEmailPublic(email string) (*model.User, error) {
-	var u model.User
-
+	var user model.User
 	err := r.db.QueryRow(`
         SELECT id, name, email, role, is_active, created_at
         FROM users
         WHERE email = $1 AND is_active = true
     `, email).Scan(
-		&u.ID,
-		&u.Name,
-		&u.Email,
-		&u.Role,
-		&u.IsActive,
-		&u.CreatedAt,
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.Role,
+		&user.IsActive,
+		&user.CreatedAt,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	return &u, nil
+	return &user, nil
 }
 
-// =========================
-// CHECK EMAIL EXISTS
-// =========================
 func (r *UserRepository) EmailExists(email string) (bool, error) {
 	var exists bool
-
 	err := r.db.QueryRow(`
         SELECT EXISTS (
             SELECT 1 FROM users WHERE email = $1
@@ -256,35 +320,48 @@ func (r *UserRepository) EmailExists(email string) (bool, error) {
 	return exists, err
 }
 
-// =========================
-// ACTIVATE USER
-// =========================
 func (r *UserRepository) Activate(id string) error {
-	_, err := r.db.Exec(`
+	result, err := r.db.Exec(`
         UPDATE users
         SET is_active = true
         WHERE id = $1
     `, id)
+	if err != nil {
+		return err
+	}
 
-	return err
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
 }
 
-// =========================
-// DEACTIVATE USER
-// =========================
 func (r *UserRepository) Deactivate(id string) error {
-	_, err := r.db.Exec(`
+	result, err := r.db.Exec(`
         UPDATE users
         SET is_active = false
-        WHERE id = $1
+        WHERE id = $1 AND is_active = true
     `, id)
+	if err != nil {
+		return err
+	}
 
-	return err
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
 }
 
-// =========================
-// USER STATS
-// =========================
 func (r *UserRepository) Stats() (map[string]any, error) {
 	stats := make(map[string]any)
 
@@ -299,7 +376,6 @@ func (r *UserRepository) Stats() (map[string]any, error) {
             COUNT(*) FILTER (WHERE is_active = false) AS inactive
         FROM users
     `).Scan(&total, &active, &inactive)
-
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +385,7 @@ func (r *UserRepository) Stats() (map[string]any, error) {
 	stats["inactive"] = inactive
 
 	rows, err := r.db.Query(`
-        SELECT role, COUNT(*) 
+        SELECT role, COUNT(*)
         FROM users
         GROUP BY role
     `)
@@ -328,20 +404,21 @@ func (r *UserRepository) Stats() (map[string]any, error) {
 		roleStats[role] = count
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	stats["by_role"] = roleStats
 	return stats, nil
 }
 
-// =========================
-// VALIDATE USER (INTERNAL)
-// =========================
 func (r *UserRepository) ValidateUser(id string) (bool, string, bool, error) {
 	var exists bool
 	var role string
 	var active bool
 
 	err := r.db.QueryRow(`
-        SELECT 
+        SELECT
             EXISTS (SELECT 1 FROM users WHERE id = $1),
             COALESCE(role, ''),
             COALESCE(is_active, false)
@@ -349,7 +426,7 @@ func (r *UserRepository) ValidateUser(id string) (bool, string, bool, error) {
         WHERE id = $1
     `, id).Scan(&exists, &role, &active)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, "", false, nil
 	}
 	if err != nil {
@@ -357,4 +434,35 @@ func (r *UserRepository) ValidateUser(id string) (bool, string, bool, error) {
 	}
 
 	return exists, role, active, nil
+}
+
+func normalizeSortBy(sortBy string) string {
+	switch strings.ToLower(strings.TrimSpace(sortBy)) {
+	case "name":
+		return "name"
+	case "email":
+		return "email"
+	case "role":
+		return "role"
+	default:
+		return "created_at"
+	}
+}
+
+func normalizeSortOrder(sortOrder string) string {
+	switch strings.ToLower(strings.TrimSpace(sortOrder)) {
+	case "asc":
+		return "ASC"
+	default:
+		return "DESC"
+	}
+}
+
+func isUniqueEmailError(err error) bool {
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) {
+		return false
+	}
+
+	return pqErr.Code == "23505"
 }

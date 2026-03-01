@@ -6,8 +6,6 @@ services:
       POSTGRES_DB: user_db
       POSTGRES_USER: user
       POSTGRES_PASSWORD: ${USER_DB_PASSWORD:?USER_DB_PASSWORD is required}
-    ports:
-      - "5432:5432"
     volumes:
       - ./user-service/migrations:/docker-entrypoint-initdb.d
       - user_db_data:/var/lib/postgresql/data
@@ -31,8 +29,6 @@ services:
       OTEL_SERVICE_NAME: user-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
       OTEL_TRACES_EXPORTER: otlp
-    ports:
-      - "8080:8080"
     depends_on:
       user-db:
         condition: service_healthy
@@ -45,8 +41,6 @@ services:
       POSTGRES_DB: product_db
       POSTGRES_USER: product
       POSTGRES_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required}
-    ports:
-      - "5434:5432"
     volumes:
       - product_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -66,8 +60,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_TRACES_EXPORTER: otlp
-    ports:
-      - "8082:8080"
     depends_on:
       product-db:
         condition: service_healthy
@@ -80,8 +72,6 @@ services:
       POSTGRES_DB: inventory_db
       POSTGRES_USER: inventory
       POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD:?INVENTORY_DB_PASSWORD is required}
-    ports:
-      - "5435:5432"
     volumes:
       - ./inventory-service/migrations:/docker-entrypoint-initdb.d
       - inventory_db_data:/var/lib/postgresql/data
@@ -110,8 +100,6 @@ services:
       OTEL_SERVICE_NAME: inventory-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
       OTEL_TRACES_EXPORTER: otlp
-    ports:
-      - "8083:8080"
     depends_on:
       inventory-db:
         condition: service_healthy
@@ -128,8 +116,6 @@ services:
       POSTGRES_DB: payment_db
       POSTGRES_USER: payment
       POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is required}
-    ports:
-      - "5436:5432"
     volumes:
       - ./payment-service/migrations:/docker-entrypoint-initdb.d
       - payment_db_data:/var/lib/postgresql/data
@@ -158,8 +144,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_TRACES_EXPORTER: otlp
-    ports:
-      - "8084:8080"
     depends_on:
       payment-db:
         condition: service_healthy
@@ -174,8 +158,6 @@ services:
       POSTGRES_DB: order_db
       POSTGRES_USER: order
       POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?ORDER_DB_PASSWORD is required}
-    ports:
-      - "5433:5432"
     volumes:
       - order_db_data:/var/lib/postgresql/data
     healthcheck:
@@ -188,8 +170,6 @@ services:
     image: redis:7-alpine
     container_name: redis
     command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -220,8 +200,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_TRACES_EXPORTER: otlp
-    ports:
-      - "8081:8080"
     depends_on:
       order-db:
         condition: service_healthy
@@ -310,8 +288,8 @@ services:
     image: grafana/grafana:10.3.1
     container_name: grafana
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?GRAFANA_ADMIN_USER is required}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
     ports:
       - "3000:3000"
     depends_on:

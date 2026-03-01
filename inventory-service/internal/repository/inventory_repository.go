@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS inventory_operations (
 );
 CREATE INDEX IF NOT EXISTS idx_inventory_ops_product_created
 ON inventory_operations (product_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_inventory_order_operation
+ON inventory_operations (order_id, operation_type)
+WHERE order_id IS NOT NULL;
 `
 	_, err := r.db.Exec(query)
 	return err
@@ -49,7 +52,91 @@ FROM inventory_operations
 WHERE idempotency_key = $1
 `
 	row := r.db.QueryRow(query, idempotencyKey)
+	return scanOperation(row)
+}
 
+func (r *InventoryRepository) FindByOrderAndType(orderID string, operationType string) (*model.InventoryOperation, error) {
+	query := `
+SELECT id, idempotency_key, operation_type, order_id, product_id, quantity,
+       status, error_code, error_message, correlation_id, created_at
+FROM inventory_operations
+WHERE order_id = $1
+  AND operation_type = $2
+`
+	row := r.db.QueryRow(query, orderID, operationType)
+	return scanOperation(row)
+}
+
+func (r *InventoryRepository) ClaimOperation(operation *model.InventoryOperation) (bool, error) {
+	query := `
+INSERT INTO inventory_operations (
+    id,
+    idempotency_key,
+    operation_type,
+    order_id,
+    product_id,
+    quantity,
+    status,
+    error_code,
+    error_message,
+    correlation_id,
+    created_at
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+ON CONFLICT DO NOTHING
+`
+	result, err := r.db.Exec(
+		query,
+		operation.ID,
+		operation.IdempotencyKey,
+		operation.OperationType,
+		operation.OrderID,
+		operation.ProductID,
+		operation.Quantity,
+		operation.Status,
+		nullIfEmpty(operation.ErrorCode),
+		nullIfEmpty(operation.ErrorMessage),
+		nullIfEmpty(operation.CorrelationID),
+		operation.CreatedAt,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+
+	return affected == 1, nil
+}
+
+func (r *InventoryRepository) UpdateOperationResult(
+	idempotencyKey string,
+	status string,
+	errorCode string,
+	errorMessage string,
+	correlationID string,
+) error {
+	query := `
+UPDATE inventory_operations
+SET status = $2,
+    error_code = $3,
+    error_message = $4,
+    correlation_id = $5
+WHERE idempotency_key = $1
+`
+	_, err := r.db.Exec(
+		query,
+		idempotencyKey,
+		status,
+		nullIfEmpty(errorCode),
+		nullIfEmpty(errorMessage),
+		nullIfEmpty(correlationID),
+	)
+	return err
+}
+
+func scanOperation(row *sql.Row) (*model.InventoryOperation, error) {
 	operation := &model.InventoryOperation{}
 	var orderID sql.NullString
 	var errorCode sql.NullString
@@ -92,39 +179,6 @@ WHERE idempotency_key = $1
 	operation.CreatedAt = createdAt
 
 	return operation, nil
-}
-
-func (r *InventoryRepository) CreateOperation(operation *model.InventoryOperation) error {
-	query := `
-INSERT INTO inventory_operations (
-    id,
-    idempotency_key,
-    operation_type,
-    order_id,
-    product_id,
-    quantity,
-    status,
-    error_code,
-    error_message,
-    correlation_id,
-    created_at
-) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-`
-	_, err := r.db.Exec(
-		query,
-		operation.ID,
-		operation.IdempotencyKey,
-		operation.OperationType,
-		operation.OrderID,
-		operation.ProductID,
-		operation.Quantity,
-		operation.Status,
-		nullIfEmpty(operation.ErrorCode),
-		nullIfEmpty(operation.ErrorMessage),
-		nullIfEmpty(operation.CorrelationID),
-		operation.CreatedAt,
-	)
-	return err
 }
 
 func nullIfEmpty(value string) any {

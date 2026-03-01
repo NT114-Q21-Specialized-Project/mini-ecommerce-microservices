@@ -67,7 +67,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return reject(exchange.getResponse(), HttpStatus.UNAUTHORIZED, "Token missing required claims");
         }
 
-        if (!isAuthorized(request, role)) {
+        if (!isAuthorized(request, role, userId)) {
             return reject(exchange.getResponse(), HttpStatus.FORBIDDEN, "Forbidden");
         }
 
@@ -119,7 +119,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         return path.startsWith("/api/products") && HttpMethod.GET.equals(method);
     }
 
-    private boolean isAuthorized(ServerHttpRequest request, String role) {
+    private boolean isAuthorized(ServerHttpRequest request, String role, String userId) {
         String path = request.getPath().value();
         HttpMethod method = request.getMethod();
 
@@ -127,39 +127,104 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             return false;
         }
 
+        if (path.startsWith("/api/users")) {
+            return isAuthorizedUserRoute(path, method, role, userId);
+        }
+
         if (path.startsWith("/api/inventory")) {
             if (HttpMethod.GET.equals(method)) {
-                return "CUSTOMER".equalsIgnoreCase(role)
-                        || "SELLER".equalsIgnoreCase(role)
-                        || "ADMIN".equalsIgnoreCase(role);
+                return isCustomer(role) || isSeller(role) || isAdmin(role);
             }
-            return "ADMIN".equalsIgnoreCase(role);
+            return isAdmin(role);
         }
 
         if (path.startsWith("/api/payments")) {
-            return "ADMIN".equalsIgnoreCase(role);
+            return isAdmin(role);
         }
 
         if (path.startsWith("/api/products") && HttpMethod.POST.equals(method)) {
-            return "SELLER".equalsIgnoreCase(role) || "ADMIN".equalsIgnoreCase(role);
+            return isSeller(role) || isAdmin(role);
         }
 
         if (path.startsWith("/api/orders") && HttpMethod.POST.equals(method)) {
-            return "CUSTOMER".equalsIgnoreCase(role) || "ADMIN".equalsIgnoreCase(role);
+            return isCustomer(role) || isAdmin(role);
         }
 
         if (path.startsWith("/api/orders") && HttpMethod.GET.equals(method)) {
             if (path.startsWith("/api/orders/outbox")) {
-                return "ADMIN".equalsIgnoreCase(role);
+                return isAdmin(role);
             }
-            return "CUSTOMER".equalsIgnoreCase(role) || "ADMIN".equalsIgnoreCase(role);
+            return isCustomer(role) || isAdmin(role);
         }
 
         if (path.matches("^/api/orders/[^/]+/cancel$") && HttpMethod.PATCH.equals(method)) {
-            return "CUSTOMER".equalsIgnoreCase(role) || "ADMIN".equalsIgnoreCase(role);
+            return isCustomer(role) || isAdmin(role);
+        }
+
+        if (path.startsWith("/api/")) {
+            return false;
         }
 
         return true;
+    }
+
+    private boolean isAuthorizedUserRoute(String path, HttpMethod method, String role, String userId) {
+        if ("/api/users".equals(path) && HttpMethod.GET.equals(method)) {
+            return isAdmin(role);
+        }
+
+        if ("/api/users/stats".equals(path) && HttpMethod.GET.equals(method)) {
+            return isAdmin(role);
+        }
+
+        if ("/api/users/by-email".equals(path) && HttpMethod.GET.equals(method)) {
+            return isAdmin(role);
+        }
+
+        if ("/api/users/email-exists".equals(path) && HttpMethod.GET.equals(method)) {
+            return isAdmin(role);
+        }
+
+        if (path.matches("^/api/users/[^/]+$")) {
+            if (HttpMethod.GET.equals(method) || HttpMethod.PUT.equals(method) || HttpMethod.DELETE.equals(method)) {
+                return isAdmin(role) || isSelf(path, userId);
+            }
+            return false;
+        }
+
+        if (path.matches("^/api/users/[^/]+/(activate|deactivate)$") && HttpMethod.PATCH.equals(method)) {
+            return isAdmin(role);
+        }
+
+        if (path.matches("^/api/users/[^/]+/(exists|role|validate)$") && HttpMethod.GET.equals(method)) {
+            return isAdmin(role);
+        }
+
+        if (path.matches("^/api/users/internal/users/[^/]+/validate$") && HttpMethod.GET.equals(method)) {
+            return isAdmin(role);
+        }
+
+        return false;
+    }
+
+    private boolean isSelf(String path, String userId) {
+        String[] segments = path.split("/");
+        if (segments.length < 4) {
+            return false;
+        }
+        return userId != null && userId.equals(segments[3]);
+    }
+
+    private boolean isAdmin(String role) {
+        return "ADMIN".equalsIgnoreCase(role);
+    }
+
+    private boolean isSeller(String role) {
+        return "SELLER".equalsIgnoreCase(role);
+    }
+
+    private boolean isCustomer(String role) {
+        return "CUSTOMER".equalsIgnoreCase(role);
     }
 
     private Mono<Void> reject(ServerHttpResponse response, HttpStatus status, String message) {

@@ -17,6 +17,17 @@ import (
 	"inventory-service/internal/repository"
 )
 
+const (
+	operationReserve   = "RESERVE"
+	operationRelease   = "RELEASE"
+	statusInProgress   = "IN_PROGRESS"
+	statusSuccess      = "SUCCESS"
+	statusFailed       = "FAILED"
+	serviceStatusResv  = "RESERVED"
+	serviceStatusRel   = "RELEASED"
+	httpConflictStatus = http.StatusConflict
+)
+
 type InventoryService struct {
 	repo                  *repository.InventoryRepository
 	httpClient            *http.Client
@@ -47,64 +58,69 @@ func NewInventoryService(repo *repository.InventoryRepository, cfg *config.Confi
 }
 
 func (s *InventoryService) Reserve(request *model.ReserveRequest, idempotencyKey string, correlationID string) (map[string]any, *model.ServiceError) {
-	if err := validateRequest(request); err != nil {
+	if err := validateReserveRequest(request); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(idempotencyKey) == "" {
+
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
 		return nil, &model.ServiceError{Code: "MISSING_IDEMPOTENCY_KEY", Message: "Idempotency-Key is required", HTTPStatus: http.StatusBadRequest}
 	}
 
-	existing, err := s.repo.FindByIdempotencyKey(idempotencyKey)
-	if err != nil {
-		return nil, &model.ServiceError{Code: "DB_ERROR", Message: err.Error(), HTTPStatus: http.StatusInternalServerError}
+	response, svcErr := s.resolveExistingOperation(
+		idempotencyKey,
+		operationReserve,
+		request.OrderID,
+		request.ProductID,
+		request.Quantity,
+		correlationID,
+		serviceStatusResv,
+	)
+	if response != nil || svcErr != nil {
+		return response, svcErr
 	}
-	if existing != nil {
-		if existing.Status == "SUCCESS" {
-			return map[string]any{
-				"status":            "RESERVED",
-				"operationId":       existing.ID,
-				"idempotentReplay":  true,
-				"correlationId":     correlationID,
-				"inventoryOperation": existing,
-			}, nil
-		}
-		return nil, &model.ServiceError{Code: existing.ErrorCode, Message: existing.ErrorMessage, HTTPStatus: http.StatusConflict}
+
+	op := buildOperation(idempotencyKey, operationReserve, request.OrderID, request.ProductID, request.Quantity, correlationID)
+	claimed, err := s.repo.ClaimOperation(op)
+	if err != nil {
+		return nil, dbServiceError(err)
+	}
+	if !claimed {
+		return s.resolveClaimConflict(
+			idempotencyKey,
+			operationReserve,
+			request.OrderID,
+			request.ProductID,
+			request.Quantity,
+			correlationID,
+			serviceStatusResv,
+		)
 	}
 
 	if chaosErr := s.maybeInjectChaos(correlationID, "reserve"); chaosErr != nil {
-		s.recordFailedOperation(idempotencyKey, "RESERVE", request.OrderID, request.ProductID, request.Quantity, correlationID, chaosErr)
-		return nil, chaosErr
+		return nil, s.markOperationFailed(idempotencyKey, correlationID, chaosErr)
 	}
 
 	product, svcErr := s.getProduct(request.ProductID, correlationID)
 	if svcErr != nil {
-		s.recordFailedOperation(idempotencyKey, "RESERVE", request.OrderID, request.ProductID, request.Quantity, correlationID, svcErr)
-		return nil, svcErr
+		return nil, s.markOperationFailed(idempotencyKey, correlationID, svcErr)
 	}
+
 	if product.Stock < request.Quantity {
-		svcErr = &model.ServiceError{Code: "OUT_OF_STOCK", Message: "Not enough stock for requested product", HTTPStatus: http.StatusConflict}
-		s.recordFailedOperation(idempotencyKey, "RESERVE", request.OrderID, request.ProductID, request.Quantity, correlationID, svcErr)
-		return nil, svcErr
+		svcErr = &model.ServiceError{
+			Code:       "OUT_OF_STOCK",
+			Message:    "Not enough stock for requested product",
+			HTTPStatus: httpConflictStatus,
+		}
+		return nil, s.markOperationFailed(idempotencyKey, correlationID, svcErr)
 	}
 
 	if svcErr = s.adjustStock("decrease-stock", request.ProductID, request.Quantity, correlationID); svcErr != nil {
-		s.recordFailedOperation(idempotencyKey, "RESERVE", request.OrderID, request.ProductID, request.Quantity, correlationID, svcErr)
-		return nil, svcErr
+		return nil, s.markOperationFailed(idempotencyKey, correlationID, svcErr)
 	}
 
-	op := &model.InventoryOperation{
-		ID:             newOperationID(),
-		IdempotencyKey: idempotencyKey,
-		OperationType:  "RESERVE",
-		OrderID:        request.OrderID,
-		ProductID:      request.ProductID,
-		Quantity:       request.Quantity,
-		Status:         "SUCCESS",
-		CorrelationID:  correlationID,
-		CreatedAt:      time.Now().UTC(),
-	}
-	if err := s.repo.CreateOperation(op); err != nil {
-		return nil, &model.ServiceError{Code: "DB_ERROR", Message: err.Error(), HTTPStatus: http.StatusInternalServerError}
+	if svcErr = s.markOperationSuccess(idempotencyKey, correlationID); svcErr != nil {
+		return nil, svcErr
 	}
 
 	middleware.LogJSON("info", "inventory.reserve.success", map[string]any{
@@ -115,10 +131,10 @@ func (s *InventoryService) Reserve(request *model.ReserveRequest, idempotencyKey
 	})
 
 	return map[string]any{
-		"status":            "RESERVED",
-		"operationId":       op.ID,
-		"idempotentReplay":  false,
-		"correlationId":     correlationID,
+		"status":             serviceStatusResv,
+		"operationId":        op.ID,
+		"idempotentReplay":   false,
+		"correlationId":      correlationID,
 		"availableStockHint": product.Stock - request.Quantity,
 	}, nil
 }
@@ -127,49 +143,71 @@ func (s *InventoryService) Release(request *model.ReleaseRequest, idempotencyKey
 	if err := validateReleaseRequest(request); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(idempotencyKey) == "" {
+
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
 		return nil, &model.ServiceError{Code: "MISSING_IDEMPOTENCY_KEY", Message: "Idempotency-Key is required", HTTPStatus: http.StatusBadRequest}
 	}
 
-	existing, err := s.repo.FindByIdempotencyKey(idempotencyKey)
-	if err != nil {
-		return nil, &model.ServiceError{Code: "DB_ERROR", Message: err.Error(), HTTPStatus: http.StatusInternalServerError}
+	response, svcErr := s.resolveExistingOperation(
+		idempotencyKey,
+		operationRelease,
+		request.OrderID,
+		request.ProductID,
+		request.Quantity,
+		correlationID,
+		serviceStatusRel,
+	)
+	if response != nil || svcErr != nil {
+		return response, svcErr
 	}
-	if existing != nil {
-		if existing.Status == "SUCCESS" {
-			return map[string]any{
-				"status":           "RELEASED",
-				"operationId":      existing.ID,
-				"idempotentReplay": true,
-				"correlationId":    correlationID,
-			}, nil
-		}
-		return nil, &model.ServiceError{Code: existing.ErrorCode, Message: existing.ErrorMessage, HTTPStatus: http.StatusConflict}
+
+	op := buildOperation(idempotencyKey, operationRelease, request.OrderID, request.ProductID, request.Quantity, correlationID)
+	claimed, err := s.repo.ClaimOperation(op)
+	if err != nil {
+		return nil, dbServiceError(err)
+	}
+	if !claimed {
+		return s.resolveClaimConflict(
+			idempotencyKey,
+			operationRelease,
+			request.OrderID,
+			request.ProductID,
+			request.Quantity,
+			correlationID,
+			serviceStatusRel,
+		)
+	}
+
+	reserveOp, err := s.repo.FindByOrderAndType(request.OrderID, operationReserve)
+	if err != nil {
+		return nil, s.markOperationFailed(idempotencyKey, correlationID, dbServiceError(err))
+	}
+	if reserveOp == nil || reserveOp.Status != statusSuccess {
+		return nil, s.markOperationFailed(idempotencyKey, correlationID, &model.ServiceError{
+			Code:       "NO_RESERVED_STOCK",
+			Message:    "No successful reserve operation found for this order",
+			HTTPStatus: httpConflictStatus,
+		})
+	}
+	if reserveOp.ProductID != request.ProductID || reserveOp.Quantity != request.Quantity {
+		return nil, s.markOperationFailed(idempotencyKey, correlationID, &model.ServiceError{
+			Code:       "RESERVATION_MISMATCH",
+			Message:    "Release payload does not match successful reservation",
+			HTTPStatus: httpConflictStatus,
+		})
 	}
 
 	if chaosErr := s.maybeInjectChaos(correlationID, "release"); chaosErr != nil {
-		s.recordFailedOperation(idempotencyKey, "RELEASE", request.OrderID, request.ProductID, request.Quantity, correlationID, chaosErr)
-		return nil, chaosErr
+		return nil, s.markOperationFailed(idempotencyKey, correlationID, chaosErr)
 	}
 
 	if svcErr := s.adjustStock("increase-stock", request.ProductID, request.Quantity, correlationID); svcErr != nil {
-		s.recordFailedOperation(idempotencyKey, "RELEASE", request.OrderID, request.ProductID, request.Quantity, correlationID, svcErr)
-		return nil, svcErr
+		return nil, s.markOperationFailed(idempotencyKey, correlationID, svcErr)
 	}
 
-	op := &model.InventoryOperation{
-		ID:             newOperationID(),
-		IdempotencyKey: idempotencyKey,
-		OperationType:  "RELEASE",
-		OrderID:        request.OrderID,
-		ProductID:      request.ProductID,
-		Quantity:       request.Quantity,
-		Status:         "SUCCESS",
-		CorrelationID:  correlationID,
-		CreatedAt:      time.Now().UTC(),
-	}
-	if err := s.repo.CreateOperation(op); err != nil {
-		return nil, &model.ServiceError{Code: "DB_ERROR", Message: err.Error(), HTTPStatus: http.StatusInternalServerError}
+	if svcErr := s.markOperationSuccess(idempotencyKey, correlationID); svcErr != nil {
+		return nil, svcErr
 	}
 
 	middleware.LogJSON("info", "inventory.release.success", map[string]any{
@@ -180,7 +218,7 @@ func (s *InventoryService) Release(request *model.ReleaseRequest, idempotencyKey
 	})
 
 	return map[string]any{
-		"status":           "RELEASED",
+		"status":           serviceStatusRel,
 		"operationId":      op.ID,
 		"idempotentReplay": false,
 		"correlationId":    correlationID,
@@ -200,6 +238,128 @@ func (s *InventoryService) CheckAvailable(productID string, correlationID string
 		AvailableStock: product.Stock,
 		Source:         "product-service",
 	}, nil
+}
+
+func (s *InventoryService) resolveExistingOperation(
+	idempotencyKey string,
+	operationType string,
+	orderID string,
+	productID string,
+	quantity int,
+	correlationID string,
+	serviceStatus string,
+) (map[string]any, *model.ServiceError) {
+	existing, err := s.repo.FindByIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return nil, dbServiceError(err)
+	}
+	if existing == nil {
+		return nil, nil
+	}
+	return s.handleExistingOperation(existing, operationType, orderID, productID, quantity, correlationID, serviceStatus)
+}
+
+func (s *InventoryService) resolveClaimConflict(
+	idempotencyKey string,
+	operationType string,
+	orderID string,
+	productID string,
+	quantity int,
+	correlationID string,
+	serviceStatus string,
+) (map[string]any, *model.ServiceError) {
+	byKey, err := s.repo.FindByIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return nil, dbServiceError(err)
+	}
+	if byKey != nil {
+		return s.handleExistingOperation(byKey, operationType, orderID, productID, quantity, correlationID, serviceStatus)
+	}
+
+	byOrder, err := s.repo.FindByOrderAndType(orderID, operationType)
+	if err != nil {
+		return nil, dbServiceError(err)
+	}
+	if byOrder == nil {
+		return nil, &model.ServiceError{
+			Code:       "IDEMPOTENCY_CONFLICT",
+			Message:    "Conflicting request detected for this operation",
+			HTTPStatus: httpConflictStatus,
+		}
+	}
+
+	if byOrder.IdempotencyKey == idempotencyKey {
+		return s.handleExistingOperation(byOrder, operationType, orderID, productID, quantity, correlationID, serviceStatus)
+	}
+
+	return nil, &model.ServiceError{
+		Code:       "ORDER_OPERATION_CONFLICT",
+		Message:    "Order already has an operation with a different idempotency key",
+		HTTPStatus: httpConflictStatus,
+	}
+}
+
+func (s *InventoryService) handleExistingOperation(
+	existing *model.InventoryOperation,
+	operationType string,
+	orderID string,
+	productID string,
+	quantity int,
+	correlationID string,
+	serviceStatus string,
+) (map[string]any, *model.ServiceError) {
+	if !matchesOperation(existing, operationType, orderID, productID, quantity) {
+		return nil, &model.ServiceError{
+			Code:       "IDEMPOTENCY_CONFLICT",
+			Message:    "Idempotency key already used with different payload",
+			HTTPStatus: httpConflictStatus,
+		}
+	}
+
+	switch strings.ToUpper(strings.TrimSpace(existing.Status)) {
+	case statusSuccess:
+		return map[string]any{
+			"status":             serviceStatus,
+			"operationId":        existing.ID,
+			"idempotentReplay":   true,
+			"correlationId":      correlationID,
+			"inventoryOperation": existing,
+		}, nil
+	case statusInProgress:
+		return nil, &model.ServiceError{
+			Code:       "IDEMPOTENCY_IN_PROGRESS",
+			Message:    "Operation is still in progress for this idempotency key",
+			HTTPStatus: httpConflictStatus,
+		}
+	default:
+		code := strings.TrimSpace(existing.ErrorCode)
+		if code == "" {
+			code = "IDEMPOTENCY_REPLAY_FAILED"
+		}
+		message := strings.TrimSpace(existing.ErrorMessage)
+		if message == "" {
+			message = "Previous request with this idempotency key failed"
+		}
+		return nil, &model.ServiceError{
+			Code:       code,
+			Message:    message,
+			HTTPStatus: httpConflictStatus,
+		}
+	}
+}
+
+func (s *InventoryService) markOperationFailed(idempotencyKey string, correlationID string, original *model.ServiceError) *model.ServiceError {
+	if err := s.repo.UpdateOperationResult(idempotencyKey, statusFailed, original.Code, original.Message, correlationID); err != nil {
+		return dbServiceError(err)
+	}
+	return original
+}
+
+func (s *InventoryService) markOperationSuccess(idempotencyKey string, correlationID string) *model.ServiceError {
+	if err := s.repo.UpdateOperationResult(idempotencyKey, statusSuccess, "", "", correlationID); err != nil {
+		return dbServiceError(err)
+	}
+	return nil
 }
 
 func (s *InventoryService) maybeInjectChaos(correlationID string, stage string) *model.ServiceError {
@@ -285,34 +445,56 @@ func (s *InventoryService) adjustStock(action string, productID string, quantity
 		if resp.StatusCode == http.StatusBadRequest {
 			code = "OUT_OF_STOCK"
 		}
-		return &model.ServiceError{Code: code, Message: errBody, HTTPStatus: http.StatusConflict}
+		return &model.ServiceError{Code: code, Message: errBody, HTTPStatus: httpConflictStatus}
 	}
 
 	return nil
 }
 
-func (s *InventoryService) recordFailedOperation(idempotencyKey, operationType, orderID, productID string, quantity int, correlationID string, svcErr *model.ServiceError) {
-	op := &model.InventoryOperation{
+func buildOperation(
+	idempotencyKey string,
+	operationType string,
+	orderID string,
+	productID string,
+	quantity int,
+	correlationID string,
+) *model.InventoryOperation {
+	return &model.InventoryOperation{
 		ID:             newOperationID(),
 		IdempotencyKey: idempotencyKey,
 		OperationType:  operationType,
 		OrderID:        orderID,
 		ProductID:      productID,
 		Quantity:       quantity,
-		Status:         "FAILED",
-		ErrorCode:      svcErr.Code,
-		ErrorMessage:   svcErr.Message,
+		Status:         statusInProgress,
 		CorrelationID:  correlationID,
 		CreatedAt:      time.Now().UTC(),
 	}
-	_ = s.repo.CreateOperation(op)
+}
+
+func matchesOperation(existing *model.InventoryOperation, operationType, orderID, productID string, quantity int) bool {
+	if existing == nil {
+		return false
+	}
+	return strings.EqualFold(existing.OperationType, operationType) &&
+		existing.OrderID == orderID &&
+		existing.ProductID == productID &&
+		existing.Quantity == quantity
+}
+
+func dbServiceError(err error) *model.ServiceError {
+	return &model.ServiceError{
+		Code:       "DB_ERROR",
+		Message:    err.Error(),
+		HTTPStatus: http.StatusInternalServerError,
+	}
 }
 
 func newOperationID() string {
 	return strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
 }
 
-func validateRequest(request *model.ReserveRequest) *model.ServiceError {
+func validateReserveRequest(request *model.ReserveRequest) *model.ServiceError {
 	if request == nil {
 		return &model.ServiceError{Code: "INVALID_REQUEST", Message: "request body is required", HTTPStatus: http.StatusBadRequest}
 	}

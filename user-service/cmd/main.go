@@ -113,7 +113,10 @@ func main() {
 	// =========================
 	// INIT DEPENDENCIES
 	// =========================
-	jwtSecret := getEnv("JWT_SECRET", "mini-ecommerce-super-secret-change-me-please")
+	jwtSecret := getEnv("JWT_SECRET", "")
+	if strings.TrimSpace(jwtSecret) == "" {
+		log.Fatal("JWT_SECRET is required")
+	}
 	jwtExpiryMinutes := getEnvInt("JWT_EXPIRES_MINUTES", 120)
 
 	repo := repository.NewUserRepository(cfg.DB)

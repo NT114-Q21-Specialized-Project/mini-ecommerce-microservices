@@ -125,4 +125,4 @@ management:
 security:
   jwt:
     enabled: ${SECURITY_JWT_ENABLED:true}
-    secret: ${SECURITY_JWT_SECRET:mini-ecommerce-super-secret-change-me-please}
+    secret: ${SECURITY_JWT_SECRET}

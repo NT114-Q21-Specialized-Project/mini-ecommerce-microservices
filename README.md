@@ -21,12 +21,8 @@ Default local ports:
 
 - API Gateway: `9000`
 - Front-end: `5173`
-- User Service: `8080`
-- Order Service: `8081`
-- Product Service: `8082`
-- Inventory Service: `8083`
-- Payment Service: `8084`
-- Redis: `6379`
+- User/Product/Order/Inventory/Payment services: internal network only (not published to host in compose)
+- Redis/Postgres: internal network only (not published to host in compose)
 - Grafana: `3000`
 - Prometheus: `9090`
 - Loki: `3100`
@@ -98,17 +94,17 @@ http://localhost:9000
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | GET | `/api/users/health` | Public | Health check |
-| POST | `/api/users` | Public | Register user (`CUSTOMER/SELLER/ADMIN`) |
+| POST | `/api/users` | Public | Register user (`CUSTOMER/SELLER`) |
 | POST | `/api/users/login` | Public | Login and get JWT |
-| GET | `/api/users` | Bearer JWT | List active users |
-| GET | `/api/users/{id}` | Bearer JWT | Get user by ID |
-| GET | `/api/users/by-email?email=...` | Bearer JWT | Get user by email |
-| GET | `/api/users/email-exists?email=...` | Bearer JWT | Check email existence |
-| PUT | `/api/users/{id}` | Bearer JWT | Update user |
-| PATCH | `/api/users/{id}/activate` | Bearer JWT | Activate user |
-| PATCH | `/api/users/{id}/deactivate` | Bearer JWT | Deactivate user |
-| DELETE | `/api/users/{id}` | Bearer JWT | Soft-delete user |
-| GET | `/api/users/stats` | Bearer JWT | User statistics |
+| GET | `/api/users` | Bearer JWT (`ADMIN`) | List active users |
+| GET | `/api/users/{id}` | Bearer JWT (Owner or `ADMIN`) | Get user by ID |
+| GET | `/api/users/by-email?email=...` | Bearer JWT (`ADMIN`) | Get user by email |
+| GET | `/api/users/email-exists?email=...` | Bearer JWT (`ADMIN`) | Check email existence |
+| PUT | `/api/users/{id}` | Bearer JWT (Owner or `ADMIN`) | Update user |
+| PATCH | `/api/users/{id}/activate` | Bearer JWT (`ADMIN`) | Activate user |
+| PATCH | `/api/users/{id}/deactivate` | Bearer JWT (`ADMIN`) | Deactivate user |
+| DELETE | `/api/users/{id}` | Bearer JWT (Owner or `ADMIN`) | Soft-delete user |
+| GET | `/api/users/stats` | Bearer JWT (`ADMIN`) | User statistics |
 
 ### 4.2 Product Service (`/api/products`)
 
@@ -170,6 +166,8 @@ PRODUCT_DB_PASSWORD=<password>
 ORDER_DB_PASSWORD=<password>
 INVENTORY_DB_PASSWORD=<password>
 PAYMENT_DB_PASSWORD=<password>
+GRAFANA_ADMIN_USER=<username>
+GRAFANA_ADMIN_PASSWORD=<strong-password>
 ```
 
 Optional tuning (already in `.env.example`):
@@ -246,7 +244,29 @@ If needed, override gateway URL:
 BASE_URL=http://localhost:9000 ./api-testing/full-test.sh
 ```
 
-## 8. CI/CD Pipeline (Jenkinsfile)
+## 8. Independent Microservice Development
+
+Start minimal stack for one service:
+
+```bash
+./scripts/dev-stack.sh up user
+./scripts/dev-stack.sh up product
+./scripts/dev-stack.sh up inventory
+./scripts/dev-stack.sh up payment
+./scripts/dev-stack.sh up order
+```
+
+Inspect minimal file scope for one service:
+
+```bash
+./scripts/service-context.sh order
+```
+
+Detailed guide:
+
+- `docs/microservice-independent-dev.md`
+
+## 9. CI/CD Pipeline (Jenkinsfile)
 
 The Jenkins pipeline is dynamic and matrix-driven:
 
@@ -268,7 +288,7 @@ The Jenkins pipeline is dynamic and matrix-driven:
   - update image tags in GitOps repo (`kubernetes-hub`)
 - Cleans up built images on Jenkins worker after successful run.
 
-## 9. Observability
+## 10. Observability
 
 The stack ships with:
 
@@ -279,11 +299,11 @@ The stack ships with:
 
 Useful URLs:
 
-- Grafana: `http://localhost:3000` (`admin/admin`)
+- Grafana: `http://localhost:3000` (use `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`)
 - Prometheus: `http://localhost:9090`
 - Tempo API: `http://localhost:3200`
 
-## 10. Notes
+## 11. Notes
 
 - API contracts are under `api-contracts/`.
 - Front-end communicates only through `api-gateway`.
