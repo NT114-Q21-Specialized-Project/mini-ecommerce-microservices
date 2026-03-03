@@ -22,8 +22,8 @@ RUN apk update && apk upgrade --no-cache
 # Copy static files từ builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# (Tuỳ chọn) custom nginx config
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Custom nginx config: SPA + reverse proxy API to gateway
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

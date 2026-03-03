@@ -21,7 +21,7 @@ import ProductList from './components/Product/ProductList';
 import ProductForm from './components/Product/ProductForm';
 import OrderPanel from './components/Order/OrderPanel';
 
-const GATEWAY_URL = (import.meta.env.VITE_GATEWAY_URL || '/api').replace(/\/$/, '');
+const GATEWAY_URL = (import.meta.env.VITE_GATEWAY_URL || '/api/v1').replace(/\/$/, '');
 const SESSION_STORAGE_KEY = 'mini-ecom-session';
 const DEFAULT_ROUTE = '/dashboard';
 
