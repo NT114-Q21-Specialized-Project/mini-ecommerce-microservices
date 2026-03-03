@@ -116,6 +116,7 @@ def cleanupBuiltImages() {
     // Remove dangling layers and older resources to keep Jenkins workers clean.
     sh 'docker image prune -f || true'
     sh 'docker system prune -f --filter "until=24h" || true'
+    sh 'rm -rf .trivy-cache || true'
 }
 
 pipeline {
@@ -134,6 +135,7 @@ pipeline {
         GITOPS_REPO = "https://github.com/NT114-Q21-Specialized-Project/kubernetes-hub.git"
         GITOPS_DIR  = "kubernetes-hub"
 
+        TRIVY_IMAGE          = "aquasec/trivy:0.57.1"
         TRIVY_SEVERITY       = "HIGH,CRITICAL"
         TRIVY_EXIT_CODE      = "1"
         TRIVY_IGNORE_UNFIXED = "true"
@@ -224,6 +226,23 @@ pipeline {
         }
 
         /* =========================
+           PREPARE TRIVY DB
+        ========================= */
+        stage('Prepare Trivy DB') {
+            when {
+                expression { anyServiceBuildEnabled() }
+            }
+            steps {
+                sh '''
+                  mkdir -p .trivy-cache
+                  docker run --rm \
+                    -v "$PWD/.trivy-cache:/root/.cache/" \
+                    ${TRIVY_IMAGE} image --download-db-only --no-progress
+                '''
+            }
+        }
+
+        /* =========================
            PREPARE GITOPS REPO (ONCE)
         ========================= */
         stage('Prepare GitOps Repo') {
@@ -304,8 +323,10 @@ pipeline {
                                 stage("Trivy Scan ${service.name}") {
                                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                                         sh """
-                                          trivy image \
-                                            --cache-dir /var/lib/trivy-cache \
+                                          docker run --rm \
+                                            -v /var/run/docker.sock:/var/run/docker.sock \
+                                            -v "\$PWD/.trivy-cache:/root/.cache/" \
+                                            ${env.TRIVY_IMAGE} image \
                                             --no-progress \
                                             --skip-db-update \
                                             --scanners vuln \
@@ -375,3 +396,4 @@ pipeline {
         }
     }
 }
+
