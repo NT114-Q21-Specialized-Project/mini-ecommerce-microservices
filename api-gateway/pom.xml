@@ -19,9 +19,12 @@
 
     <properties>
         <java.version>17</java.version>
+        <jackson-bom.version>2.18.6</jackson-bom.version>
+        <logback.version>1.5.19</logback.version>
+        <reactor-netty.version>1.2.8</reactor-netty.version>
         <spring-cloud.version>2024.0.3</spring-cloud.version>
         <spring-framework.version>6.2.11</spring-framework.version>
-        <netty.version>4.1.124.Final</netty.version>
+        <netty.version>4.1.129.Final</netty.version>
     </properties>
 
     <dependencies>
