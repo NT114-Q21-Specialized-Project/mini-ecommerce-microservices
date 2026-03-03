@@ -326,7 +326,6 @@ pipeline {
 
                                 stage("Trivy Source Scan ${service.name}") {
                                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                                        def includeDevDepsFlag = service.name == 'frontend' ? '--include-dev-deps' : ''
                                         sh """
                                           docker run --rm \
                                             -v "\$PWD:/work" \
@@ -340,7 +339,7 @@ pipeline {
                                             --severity ${env.TRIVY_SOURCE_SEVERITY} \
                                             --exit-code ${env.TRIVY_EXIT_CODE} \
                                             --ignore-unfixed=${env.TRIVY_IGNORE_UNFIXED} \
-                                            ${includeDevDepsFlag} ./${service.dir}
+                                            ./${service.dir}
                                         """
                                     }
                                 }
