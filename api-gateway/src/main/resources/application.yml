@@ -7,20 +7,17 @@ spring:
 
   cloud:
     gateway:
-      # ======================
-      # CẤU HÌNH CORS TẬP TRUNG TẠI GATEWAY
-      # ======================
       globalcors:
         add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
-            # ⚠️ BẮT BUỘC dùng allowedOriginPatterns khi allowCredentials = true
             allowedOriginPatterns:
               - ${GATEWAY_ALLOWED_ORIGIN_PATTERN:http://localhost:5173}
             allowedMethods:
               - GET
               - POST
               - PUT
+              - PATCH
               - DELETE
               - OPTIONS
             allowedHeaders: "*"
@@ -32,72 +29,54 @@ spring:
         - AddResponseHeader=X-Powered-By, Spring-Cloud-Gateway
 
       routes:
-        # ======================
-        # USER SERVICE - HEALTH CHECK
-        # (Bổ sung để tránh lỗi UUID khi gọi /api/users/health)
-        # ======================
         - id: user-service-health
           uri: ${USER_SERVICE_URL:http://user-service:8080}
           predicates:
-            - Path=/api/users/health
+            - Path=/api/v1/users/health
           filters:
-            - RewritePath=/api/users/health, /health
+            - RewritePath=/api/v1/users/health, /health
 
-        # ======================
-        # USER SERVICE (Go)
-        # Gọi:      http://localhost:9000/api/users
-        # Chuyển:   http://user-service:8080/users
-        # ======================
+        - id: user-service-internal-validate
+          uri: ${USER_SERVICE_URL:http://user-service:8080}
+          predicates:
+            - Path=/api/v1/users/internal/users/**
+          filters:
+            - RewritePath=/api/v1/users/internal/users/(?<segment>.*), /internal/users/$\{segment}
+
         - id: user-service
           uri: ${USER_SERVICE_URL:http://user-service:8080}
           predicates:
-            - Path=/api/users/**, /api/users
+            - Path=/api/v1/users/**, /api/v1/users
           filters:
-            - StripPrefix=1
+            - StripPrefix=2
 
-        # ======================
-        # PRODUCT SERVICE (Java)
-        # Gọi:      http://localhost:9000/api/products
-        # Chuyển:   http://product-service:8080/products
-        # ======================
         - id: product-service
           uri: ${PRODUCT_SERVICE_URL:http://product-service:8080}
           predicates:
-            - Path=/api/products/**, /api/products
+            - Path=/api/v1/products/**, /api/v1/products
           filters:
-            - StripPrefix=1
+            - StripPrefix=2
 
-        # ======================
-        # ORDER SERVICE (Java)
-        # Gọi:      http://localhost:9000/api/orders
-        # Chuyển:   http://order-service:8080/orders
-        # ======================
         - id: order-service
           uri: ${ORDER_SERVICE_URL:http://order-service:8080}
           predicates:
-            - Path=/api/orders/**, /api/orders
+            - Path=/api/v1/orders/**, /api/v1/orders
           filters:
-            - StripPrefix=1
+            - StripPrefix=2
 
-        # ======================
-        # INVENTORY SERVICE (Go)
-        # ======================
         - id: inventory-service
           uri: ${INVENTORY_SERVICE_URL:http://inventory-service:8080}
           predicates:
-            - Path=/api/inventory/**, /api/inventory
+            - Path=/api/v1/inventory/**, /api/v1/inventory
           filters:
-            - StripPrefix=1
+            - StripPrefix=2
 
-        # ======================
-        # PAYMENT SERVICE (Java)
-        # ======================
         - id: payment-service
           uri: ${PAYMENT_SERVICE_URL:http://payment-service:8080}
           predicates:
-            - Path=/api/payments/**, /api/payments
+            - Path=/api/v1/payments/**, /api/v1/payments
           filters:
-            - StripPrefix=1
+            - StripPrefix=2
 
 management:
   endpoints:
@@ -113,7 +92,6 @@ management:
       enabled: true
     readinessstate:
       enabled: true
-
   tracing:
     enabled: true
     sampling:
@@ -126,3 +104,144 @@ security:
   jwt:
     enabled: ${SECURITY_JWT_ENABLED:true}
     secret: ${SECURITY_JWT_SECRET}
+
+  login-protection:
+    enabled: ${SECURITY_LOGIN_PROTECTION_ENABLED:true}
+    max-requests-per-window: ${SECURITY_LOGIN_RATE_LIMIT_MAX_REQUESTS:20}
+    rate-limit-window-seconds: ${SECURITY_LOGIN_RATE_LIMIT_WINDOW_SECONDS:60}
+    max-failed-attempts: ${SECURITY_LOGIN_MAX_FAILED_ATTEMPTS:5}
+    failed-attempt-window-seconds: ${SECURITY_LOGIN_FAILED_ATTEMPT_WINDOW_SECONDS:300}
+    block-duration-seconds: ${SECURITY_LOGIN_BLOCK_DURATION_SECONDS:900}
+
+  authz:
+    enforce-version-prefix: true
+    required-prefix: /api/v1
+
+    public-routes:
+      - id: actuator-health
+        path-pattern: /actuator/health
+        methods: [GET]
+      - id: actuator-info
+        path-pattern: /actuator/info
+        methods: [GET]
+      - id: user-health
+        path-pattern: /api/v1/users/health
+        methods: [GET]
+      - id: inventory-health
+        path-pattern: /api/v1/inventory/health
+        methods: [GET]
+      - id: payment-health
+        path-pattern: /api/v1/payments/health
+        methods: [GET]
+      - id: user-register
+        path-pattern: /api/v1/users
+        methods: [POST]
+      - id: user-login
+        path-pattern: /api/v1/users/login
+        methods: [POST]
+      - id: product-read
+        path-pattern: /api/v1/products/**
+        methods: [GET]
+
+    policies:
+      - id: user-list
+        path-pattern: /api/v1/users
+        methods: [GET]
+        roles: [ADMIN]
+
+      - id: user-by-email
+        path-pattern: /api/v1/users/by-email
+        methods: [GET]
+        roles: [ADMIN]
+
+      - id: user-email-exists
+        path-pattern: /api/v1/users/email-exists
+        methods: [GET]
+        roles: [ADMIN]
+
+      - id: user-stats
+        path-pattern: /api/v1/users/stats
+        methods: [GET]
+        roles: [ADMIN]
+
+      - id: user-by-id
+        path-pattern: /api/v1/users/{id}
+        methods: [GET, PUT, DELETE]
+        roles: [ADMIN, CUSTOMER, SELLER]
+        owner-check: true
+        owner-path-variable: id
+
+      - id: user-activation
+        path-pattern: /api/v1/users/{id}/activate
+        methods: [PATCH]
+        roles: [ADMIN]
+
+      - id: user-deactivation
+        path-pattern: /api/v1/users/{id}/deactivate
+        methods: [PATCH]
+        roles: [ADMIN]
+
+      - id: user-exists
+        path-pattern: /api/v1/users/{id}/exists
+        methods: [GET]
+        roles: [ADMIN]
+
+      - id: user-role
+        path-pattern: /api/v1/users/{id}/role
+        methods: [GET]
+        roles: [ADMIN]
+
+      - id: user-validate
+        path-pattern: /api/v1/users/{id}/validate
+        methods: [GET]
+        roles: [ADMIN]
+
+      - id: user-internal-validate
+        path-pattern: /api/v1/users/internal/users/{id}/validate
+        methods: [GET]
+        roles: [ADMIN]
+
+      - id: product-write
+        path-pattern: /api/v1/products
+        methods: [POST]
+        roles: [SELLER, ADMIN]
+
+      - id: inventory-read
+        path-pattern: /api/v1/inventory/**
+        methods: [GET]
+        roles: [CUSTOMER, SELLER, ADMIN]
+
+      - id: inventory-write
+        path-pattern: /api/v1/inventory/**
+        methods: [POST]
+        roles: [ADMIN]
+
+      - id: payment-all
+        path-pattern: /api/v1/payments/**
+        methods: [GET, POST]
+        roles: [ADMIN]
+
+      - id: order-outbox
+        path-pattern: /api/v1/orders/outbox/**
+        methods: [GET]
+        roles: [ADMIN]
+
+      - id: order-create
+        path-pattern: /api/v1/orders
+        methods: [POST]
+        roles: [CUSTOMER, ADMIN]
+
+      - id: order-list
+        path-pattern: /api/v1/orders
+        methods: [GET]
+        roles: [CUSTOMER, ADMIN]
+
+      - id: order-read
+        path-pattern: /api/v1/orders/**
+        methods: [GET]
+        roles: [CUSTOMER, ADMIN]
+
+      - id: order-cancel
+        path-pattern: /api/v1/orders/{id}/cancel
+        methods: [PATCH]
+        roles: [CUSTOMER, ADMIN]

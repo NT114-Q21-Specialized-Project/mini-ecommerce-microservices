@@ -46,45 +46,45 @@ echo "SUFFIX=$SUFFIX"
 SELLER_EMAIL="product_seller_${SUFFIX}@test.com"
 CUSTOMER_EMAIL="product_customer_${SUFFIX}@test.com"
 
-code=$(request POST "/api/users" "$TMP_DIR/seller_create.out" \
+code=$(request POST "/api/v1/users" "$TMP_DIR/seller_create.out" \
   -H 'Content-Type: application/json' \
   -d "{\"name\":\"Product Seller ${SUFFIX}\",\"email\":\"$SELLER_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"SELLER\"}")
 assert_code "$code" "201" "create seller" "$TMP_DIR/seller_create.out"
 
-code=$(request POST "/api/users/login" "$TMP_DIR/seller_login.out" \
+code=$(request POST "/api/v1/users/login" "$TMP_DIR/seller_login.out" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$SELLER_EMAIL\",\"password\":\"$PASSWORD\"}")
 assert_code "$code" "200" "login seller" "$TMP_DIR/seller_login.out"
 SELLER_TOKEN="$(jq -r '.access_token' "$TMP_DIR/seller_login.out")"
 
-code=$(request POST "/api/users" "$TMP_DIR/customer_create.out" \
+code=$(request POST "/api/v1/users" "$TMP_DIR/customer_create.out" \
   -H 'Content-Type: application/json' \
   -d "{\"name\":\"Product Customer ${SUFFIX}\",\"email\":\"$CUSTOMER_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"CUSTOMER\"}")
 assert_code "$code" "201" "create customer" "$TMP_DIR/customer_create.out"
 
-code=$(request POST "/api/users/login" "$TMP_DIR/customer_login.out" \
+code=$(request POST "/api/v1/users/login" "$TMP_DIR/customer_login.out" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$CUSTOMER_EMAIL\",\"password\":\"$PASSWORD\"}")
 assert_code "$code" "200" "login customer" "$TMP_DIR/customer_login.out"
 CUSTOMER_TOKEN="$(jq -r '.access_token' "$TMP_DIR/customer_login.out")"
 
-code=$(request POST "/api/products" "$TMP_DIR/product_create.out" \
+code=$(request POST "/api/v1/products" "$TMP_DIR/product_create.out" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $SELLER_TOKEN" \
   -d "{\"name\":\"Smoke Product ${SUFFIX}\",\"price\":199.9,\"stock\":10}")
 assert_code "$code" "201" "create product by seller" "$TMP_DIR/product_create.out"
 PRODUCT_ID="$(jq -r '.id' "$TMP_DIR/product_create.out")"
 
-code=$(request POST "/api/products" "$TMP_DIR/product_create_forbidden.out" \
+code=$(request POST "/api/v1/products" "$TMP_DIR/product_create_forbidden.out" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -d "{\"name\":\"Forbidden Product ${SUFFIX}\",\"price\":10,\"stock\":1}")
 assert_code "$code" "403" "customer cannot create product" "$TMP_DIR/product_create_forbidden.out"
 
-code=$(request GET "/api/products" "$TMP_DIR/product_list.out")
+code=$(request GET "/api/v1/products" "$TMP_DIR/product_list.out")
 assert_code "$code" "200" "list products" "$TMP_DIR/product_list.out"
 
-code=$(request GET "/api/products/$PRODUCT_ID" "$TMP_DIR/product_get.out")
+code=$(request GET "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_get.out")
 assert_code "$code" "200" "get product by id" "$TMP_DIR/product_get.out"
 
 echo "----- SUMMARY -----"

@@ -4,6 +4,7 @@ set -euo pipefail
 BASE_URL="${BASE_URL:-http://localhost:9000}"
 
 scripts=(
+  "gateway-service.sh"
   "user-service.sh"
   "product-service.sh"
   "inventory-service.sh"

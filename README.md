@@ -225,6 +225,7 @@ docker compose down -v
 Service-level smoke scripts:
 
 ```bash
+./api-testing/gateway-service.sh
 ./api-testing/user-service.sh
 ./api-testing/product-service.sh
 ./api-testing/inventory-service.sh

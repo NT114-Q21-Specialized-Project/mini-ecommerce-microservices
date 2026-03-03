@@ -71,55 +71,55 @@ REJECT_ADMIN_EMAIL="inventory_admin_${SUFFIX}@test.com"
 ORDER_ID="$(new_uuid)"
 UNKNOWN_PRODUCT_ID="$(new_uuid)"
 
-code=$(request GET "/api/inventory/health" "$TMP_DIR/health.out")
+code=$(request GET "/api/v1/inventory/health" "$TMP_DIR/health.out")
 assert_code "$code" "200" "inventory health check" "$TMP_DIR/health.out"
 
-code=$(request POST "/api/users" "$TMP_DIR/seller_create.out" \
+code=$(request POST "/api/v1/users" "$TMP_DIR/seller_create.out" \
   -H 'Content-Type: application/json' \
   -d "{\"name\":\"Inventory Seller ${SUFFIX}\",\"email\":\"$SELLER_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"SELLER\"}")
 assert_code "$code" "201" "create seller" "$TMP_DIR/seller_create.out"
 
-code=$(request POST "/api/users" "$TMP_DIR/customer_create.out" \
+code=$(request POST "/api/v1/users" "$TMP_DIR/customer_create.out" \
   -H 'Content-Type: application/json' \
   -d "{\"name\":\"Inventory Customer ${SUFFIX}\",\"email\":\"$CUSTOMER_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"CUSTOMER\"}")
 assert_code "$code" "201" "create customer" "$TMP_DIR/customer_create.out"
 
-code=$(request POST "/api/users" "$TMP_DIR/admin_create.out" \
+code=$(request POST "/api/v1/users" "$TMP_DIR/admin_create.out" \
   -H 'Content-Type: application/json' \
   -d "{\"name\":\"Inventory Admin ${SUFFIX}\",\"email\":\"$REJECT_ADMIN_EMAIL\",\"password\":\"$PASSWORD\",\"role\":\"ADMIN\"}")
 assert_code "$code" "400" "reject admin self-register" "$TMP_DIR/admin_create.out"
 
-code=$(request POST "/api/users/login" "$TMP_DIR/seller_login.out" \
+code=$(request POST "/api/v1/users/login" "$TMP_DIR/seller_login.out" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$SELLER_EMAIL\",\"password\":\"$PASSWORD\"}")
 assert_code "$code" "200" "login seller" "$TMP_DIR/seller_login.out"
 SELLER_TOKEN="$(jq -r '.access_token' "$TMP_DIR/seller_login.out")"
 
-code=$(request POST "/api/users/login" "$TMP_DIR/customer_login.out" \
+code=$(request POST "/api/v1/users/login" "$TMP_DIR/customer_login.out" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$CUSTOMER_EMAIL\",\"password\":\"$PASSWORD\"}")
 assert_code "$code" "200" "login customer" "$TMP_DIR/customer_login.out"
 CUSTOMER_TOKEN="$(jq -r '.access_token' "$TMP_DIR/customer_login.out")"
 
-code=$(request POST "/api/users/login" "$TMP_DIR/admin_login.out" \
+code=$(request POST "/api/v1/users/login" "$TMP_DIR/admin_login.out" \
   -H 'Content-Type: application/json' \
   -d '{"email":"admin@ems.com","password":"admin123"}')
 assert_code "$code" "200" "login seeded admin" "$TMP_DIR/admin_login.out"
 ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_login.out")"
 
-code=$(request POST "/api/products" "$TMP_DIR/product_create.out" \
+code=$(request POST "/api/v1/products" "$TMP_DIR/product_create.out" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $SELLER_TOKEN" \
   -d "{\"name\":\"Inventory Product ${SUFFIX}\",\"price\":89.5,\"stock\":9}")
 assert_code "$code" "201" "create product" "$TMP_DIR/product_create.out"
 PRODUCT_ID="$(jq -r '.id' "$TMP_DIR/product_create.out")"
 
-code=$(request GET "/api/inventory/$PRODUCT_ID" "$TMP_DIR/inventory_get_customer.out" \
+code=$(request GET "/api/v1/inventory/$PRODUCT_ID" "$TMP_DIR/inventory_get_customer.out" \
   -H "Authorization: Bearer $CUSTOMER_TOKEN")
 assert_code "$code" "200" "get inventory by product id (customer)" "$TMP_DIR/inventory_get_customer.out"
 assert_jq '.productId == "'"$PRODUCT_ID"'"' "inventory response contains product id" "$TMP_DIR/inventory_get_customer.out"
 
-code=$(request POST "/api/inventory/reserve" "$TMP_DIR/inventory_reserve_customer.out" \
+code=$(request POST "/api/v1/inventory/reserve" "$TMP_DIR/inventory_reserve_customer.out" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $CUSTOMER_TOKEN" \
   -H "Idempotency-Key: inventory-customer-forbidden-${SUFFIX}" \
@@ -127,7 +127,7 @@ code=$(request POST "/api/inventory/reserve" "$TMP_DIR/inventory_reserve_custome
 assert_code "$code" "403" "customer cannot reserve inventory" "$TMP_DIR/inventory_reserve_customer.out"
 
 RESERVE_KEY="inventory-reserve-${SUFFIX}"
-code=$(request POST "/api/inventory/reserve" "$TMP_DIR/inventory_reserve_admin.out" \
+code=$(request POST "/api/v1/inventory/reserve" "$TMP_DIR/inventory_reserve_admin.out" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Idempotency-Key: $RESERVE_KEY" \
@@ -135,7 +135,7 @@ code=$(request POST "/api/inventory/reserve" "$TMP_DIR/inventory_reserve_admin.o
 assert_code "$code" "200" "reserve inventory (admin)" "$TMP_DIR/inventory_reserve_admin.out"
 assert_jq '.status == "RESERVED"' "reserve result status is RESERVED" "$TMP_DIR/inventory_reserve_admin.out"
 
-code=$(request POST "/api/inventory/reserve" "$TMP_DIR/inventory_reserve_replay.out" \
+code=$(request POST "/api/v1/inventory/reserve" "$TMP_DIR/inventory_reserve_replay.out" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Idempotency-Key: $RESERVE_KEY" \
@@ -144,7 +144,7 @@ assert_code "$code" "200" "reserve inventory idempotency replay" "$TMP_DIR/inven
 assert_jq '.idempotentReplay == true' "reserve replay returns idempotentReplay=true" "$TMP_DIR/inventory_reserve_replay.out"
 
 RELEASE_KEY="inventory-release-${SUFFIX}"
-code=$(request POST "/api/inventory/release" "$TMP_DIR/inventory_release_admin.out" \
+code=$(request POST "/api/v1/inventory/release" "$TMP_DIR/inventory_release_admin.out" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Idempotency-Key: $RELEASE_KEY" \
@@ -152,7 +152,7 @@ code=$(request POST "/api/inventory/release" "$TMP_DIR/inventory_release_admin.o
 assert_code "$code" "200" "release inventory (admin)" "$TMP_DIR/inventory_release_admin.out"
 assert_jq '.status == "RELEASED"' "release result status is RELEASED" "$TMP_DIR/inventory_release_admin.out"
 
-code=$(request POST "/api/inventory/release" "$TMP_DIR/inventory_release_replay.out" \
+code=$(request POST "/api/v1/inventory/release" "$TMP_DIR/inventory_release_replay.out" \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Idempotency-Key: $RELEASE_KEY" \
@@ -160,15 +160,15 @@ code=$(request POST "/api/inventory/release" "$TMP_DIR/inventory_release_replay.
 assert_code "$code" "200" "release inventory idempotency replay" "$TMP_DIR/inventory_release_replay.out"
 assert_jq '.idempotentReplay == true' "release replay returns idempotentReplay=true" "$TMP_DIR/inventory_release_replay.out"
 
-code=$(request GET "/api/inventory/simulate-cpu?seconds=1" "$TMP_DIR/sim_cpu.out" \
+code=$(request GET "/api/v1/inventory/simulate-cpu?seconds=1" "$TMP_DIR/sim_cpu.out" \
   -H "Authorization: Bearer $ADMIN_TOKEN")
 assert_code "$code" "200" "simulate inventory cpu load" "$TMP_DIR/sim_cpu.out"
 
-code=$(request GET "/api/inventory/simulate-memory?mb=32" "$TMP_DIR/sim_mem.out" \
+code=$(request GET "/api/v1/inventory/simulate-memory?mb=32" "$TMP_DIR/sim_mem.out" \
   -H "Authorization: Bearer $ADMIN_TOKEN")
 assert_code "$code" "200" "simulate inventory memory load" "$TMP_DIR/sim_mem.out"
 
-code=$(request GET "/api/inventory/$UNKNOWN_PRODUCT_ID" "$TMP_DIR/inventory_unknown_product.out" \
+code=$(request GET "/api/v1/inventory/$UNKNOWN_PRODUCT_ID" "$TMP_DIR/inventory_unknown_product.out" \
   -H "Authorization: Bearer $ADMIN_TOKEN")
 assert_code "$code" "404" "unknown product returns 404" "$TMP_DIR/inventory_unknown_product.out"
 assert_jq '.error.code == "INVALID_PRODUCT"' "unknown product error code INVALID_PRODUCT" "$TMP_DIR/inventory_unknown_product.out"
