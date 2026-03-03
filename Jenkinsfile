@@ -137,6 +137,7 @@ pipeline {
 
         TRIVY_IMAGE          = "aquasec/trivy:0.57.1"
         TRIVY_SEVERITY       = "HIGH,CRITICAL"
+        TRIVY_SOURCE_SEVERITY = "MEDIUM,HIGH,CRITICAL"
         TRIVY_EXIT_CODE      = "1"
         TRIVY_IGNORE_UNFIXED = "true"
     }
@@ -238,6 +239,9 @@ pipeline {
                   docker run --rm \
                     -v "$PWD/.trivy-cache:/root/.cache/" \
                     ${TRIVY_IMAGE} image --download-db-only --no-progress
+                  docker run --rm \
+                    -v "$PWD/.trivy-cache:/root/.cache/" \
+                    ${TRIVY_IMAGE} image --download-java-db-only --no-progress
                 '''
             }
         }
@@ -320,6 +324,27 @@ pipeline {
                                     sh "docker build -t ${imageRef(service)} ./${service.dir}"
                                 }
 
+                                stage("Trivy Source Scan ${service.name}") {
+                                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                                        def includeDevDepsFlag = service.name == 'frontend' ? '--include-dev-deps' : ''
+                                        sh """
+                                          docker run --rm \
+                                            -v "\$PWD:/work" \
+                                            -v "\$PWD/.trivy-cache:/root/.cache/" \
+                                            -w /work \
+                                            ${env.TRIVY_IMAGE} fs \
+                                            --no-progress \
+                                            --skip-db-update \
+                                            --skip-java-db-update \
+                                            --scanners vuln \
+                                            --severity ${env.TRIVY_SOURCE_SEVERITY} \
+                                            --exit-code ${env.TRIVY_EXIT_CODE} \
+                                            --ignore-unfixed=${env.TRIVY_IGNORE_UNFIXED} \
+                                            ${includeDevDepsFlag} ./${service.dir}
+                                        """
+                                    }
+                                }
+
                                 stage("Trivy Scan ${service.name}") {
                                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                                         sh """
@@ -329,6 +354,7 @@ pipeline {
                                             ${env.TRIVY_IMAGE} image \
                                             --no-progress \
                                             --skip-db-update \
+                                            --skip-java-db-update \
                                             --scanners vuln \
                                             --severity ${env.TRIVY_SEVERITY} \
                                             --exit-code ${env.TRIVY_EXIT_CODE} \
@@ -396,4 +422,3 @@ pipeline {
         }
     }
 }
-
