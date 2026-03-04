@@ -6,7 +6,7 @@ const ProductList = ({ products, onRefresh, onBuy, loading, currentUser, onOpenA
   const canCreateProduct = currentUser?.role === 'SELLER' || currentUser?.role === 'ADMIN';
 
   return (
-    <section className="glass-panel rounded-[32px] border p-5 md:p-6">
+    <section className="panel-surface rounded-[32px] border p-5 md:p-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 md:text-xl">
           <Package2 className="h-5 w-5 text-sky-600" />
@@ -17,7 +17,7 @@ const ProductList = ({ products, onRefresh, onBuy, loading, currentUser, onOpenA
           <button
             type="button"
             onClick={onRefresh}
-            className="inline-flex items-center gap-1 rounded-2xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
+            className="chip-soft inline-flex items-center gap-1 rounded-2xl px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
             title="Làm mới danh sách sản phẩm"
           >
             <RotateCw className="h-4 w-4" />
@@ -28,7 +28,7 @@ const ProductList = ({ products, onRefresh, onBuy, loading, currentUser, onOpenA
             <button
               type="button"
               onClick={onOpenAddModal}
-              className="inline-flex items-center gap-1 rounded-2xl bg-sky-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-700"
+              className="inline-flex items-center gap-1 rounded-2xl bg-gradient-to-r from-sky-600 to-blue-700 px-3 py-2 text-xs font-semibold text-white transition hover:from-sky-700 hover:to-blue-800"
             >
               <Plus className="h-4 w-4" />
               Đăng sản phẩm
@@ -38,7 +38,7 @@ const ProductList = ({ products, onRefresh, onBuy, loading, currentUser, onOpenA
       </div>
 
       {products.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-8 text-center text-sm text-slate-500">
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white/75 p-10 text-center text-sm text-slate-500">
           Chưa có sản phẩm nào trong hệ thống.
         </div>
       ) : (

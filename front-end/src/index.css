@@ -64,6 +64,36 @@ h3 {
   backdrop-filter: blur(12px);
 }
 
+.panel-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(246, 251, 255, 0.84));
+  border-color: rgba(191, 219, 254, 0.5);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 40px rgba(59, 130, 246, 0.08);
+}
+
+.chip-soft {
+  border: 1px solid rgba(186, 230, 253, 0.72);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.dashboard-input {
+  border: 1px solid rgba(186, 230, 253, 0.78);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.8), rgba(238, 248, 255, 0.7));
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-input:focus {
+  border-color: rgba(56, 189, 248, 0.86);
+  box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.3);
+}
+
+.dashboard-rail {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 251, 255, 0.82));
+}
+
 .auth-stage {
   position: relative;
   display: grid;

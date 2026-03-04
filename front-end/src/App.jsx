@@ -718,12 +718,12 @@ function App() {
             </div>
           </section>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[88px_minmax(0,1fr)_360px]">
-            <aside className="glass-panel hidden h-fit flex-col items-center gap-6 rounded-[32px] border px-4 py-6 text-slate-600 lg:flex">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-lg">
+          <div className="grid gap-5 lg:grid-cols-[92px_minmax(0,1fr)_340px] xl:grid-cols-[92px_minmax(0,1fr)_360px]">
+            <aside className="dashboard-rail glass-panel sticky top-4 hidden h-fit flex-col items-center gap-6 rounded-[34px] border px-4 py-6 text-slate-600 lg:flex">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-blue-700 text-white shadow-lg shadow-sky-200/70">
                 <ShoppingCart className="h-6 w-6" />
               </div>
-              <nav className="flex flex-col items-center gap-4">
+              <nav className="flex flex-col items-center gap-3.5">
                 {navItems.map((item) => {
                   const isAllowed = isRouteAllowed(item);
                   const Icon = item.icon;
@@ -746,7 +746,7 @@ function App() {
                       href={`#${item.path}`}
                       className={`group flex h-11 w-11 items-center justify-center rounded-2xl border text-slate-500 shadow-sm transition hover:-translate-y-0.5 ${
                         isActive
-                          ? 'border-sky-300 bg-sky-600 text-white shadow-md shadow-sky-200'
+                          ? 'border-sky-200 bg-gradient-to-br from-sky-500 to-blue-700 text-white shadow-md shadow-sky-200'
                           : 'border-transparent bg-white/70 hover:border-sky-200 hover:bg-white hover:text-sky-700'
                       }`}
                       title={item.label}
@@ -761,8 +761,8 @@ function App() {
               </div>
             </aside>
 
-            <main className="space-y-6">
-              <div className="glass-panel flex flex-col gap-4 rounded-[32px] border px-5 py-4 md:flex-row md:items-center md:justify-between">
+            <main className="space-y-5">
+              <div className="panel-surface flex flex-col gap-4 rounded-[32px] border px-5 py-4 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-600">
                     Store Operations
@@ -775,11 +775,11 @@ function App() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2 rounded-full border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
+                  <div className="chip-soft flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold text-slate-600">
                     <span className="h-2 w-2 rounded-full bg-emerald-400" />
                     Live sync
                   </div>
-                  <div className="rounded-full border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
+                  <div className="chip-soft rounded-full px-3 py-2 text-xs font-semibold text-slate-600">
                     {currentUser.name} · {currentUser.role}
                   </div>
                   <button
@@ -793,7 +793,7 @@ function App() {
               </div>
 
               {showSearchBar && (
-                <div className="glass-panel rounded-[32px] border px-5 py-4">
+                <div className="panel-surface rounded-[30px] border px-5 py-4">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="relative flex-1">
                       <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-500" />
@@ -802,14 +802,14 @@ function App() {
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         placeholder="Search products, vendors, or keywords..."
-                        className="w-full rounded-2xl border border-sky-100 bg-white py-3 pl-11 pr-4 text-sm font-medium text-slate-700 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200"
+                        className="dashboard-input w-full py-3 pl-11 pr-4 text-sm font-medium text-slate-700 outline-none"
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
-                      <div className="rounded-2xl bg-sky-50 px-4 py-3 text-xs font-semibold text-sky-700">
+                      <div className="chip-soft rounded-2xl px-4 py-3 text-xs font-semibold text-sky-700">
                         Products: {products.length}
                       </div>
-                      <div className="rounded-2xl bg-sky-50 px-4 py-3 text-xs font-semibold text-sky-700">
+                      <div className="chip-soft rounded-2xl px-4 py-3 text-xs font-semibold text-sky-700">
                         Orders: {orders.length}
                       </div>
                     </div>
@@ -820,7 +820,7 @@ function App() {
               {renderMainContent()}
             </main>
 
-            <aside className="space-y-6">
+            <aside className="space-y-5">
               <UserSidebar currentUser={currentUser} users={users} orders={orders} />
               {showOrderSidebar && (
                 <OrderPanel

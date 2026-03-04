@@ -13,7 +13,7 @@ const ProductCard = ({ product, onBuy, loading, userRole }) => {
   };
 
   return (
-    <article className="group relative overflow-hidden rounded-[28px] border border-slate-200 bg-white/85 p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+    <article className="group relative overflow-hidden rounded-[28px] border border-slate-200 bg-white/88 p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
       <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-sky-100/80 blur-2xl" />
       <div className="relative flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
@@ -36,7 +36,7 @@ const ProductCard = ({ product, onBuy, loading, userRole }) => {
 
       <div className="relative mt-4 flex items-end justify-between">
         <p className="text-2xl font-extrabold text-slate-900">${Number(product.price || 0).toFixed(2)}</p>
-        <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">Cold blue deal</span>
+        <span className="chip-soft rounded-full px-3 py-1 text-xs font-semibold text-sky-700">Cold blue deal</span>
       </div>
 
       <div className="relative mt-4 flex items-center gap-2">
@@ -52,7 +52,7 @@ const ProductCard = ({ product, onBuy, loading, userRole }) => {
             }
             setQuantity(Math.min(Math.max(1, nextValue), Math.max(product.stock || 1, 1)));
           }}
-          className="w-20 rounded-2xl border border-sky-100 bg-white px-3 py-2 text-sm outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-200"
+          className="dashboard-input w-20 rounded-2xl px-3 py-2 text-sm outline-none"
           disabled={!canBuy || outOfStock}
         />
         <button

@@ -23,7 +23,7 @@ const OrderPanel = ({ orders, loading, currentUser, onRefresh, onCancel }) => {
   const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
 
   return (
-    <section className="glass-panel rounded-[32px] border p-5 md:p-6">
+    <section className="panel-surface rounded-[32px] border p-5 md:p-6">
       <div className="mb-5 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 md:text-xl">
           <ListOrdered className="h-5 w-5 text-sky-600" />
@@ -32,14 +32,14 @@ const OrderPanel = ({ orders, loading, currentUser, onRefresh, onCancel }) => {
         <button
           type="button"
           onClick={onRefresh}
-          className="inline-flex items-center gap-1 rounded-2xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
+          className="chip-soft inline-flex items-center gap-1 rounded-2xl px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-50"
         >
           <RotateCw className="h-4 w-4" />
           Làm mới
         </button>
       </div>
 
-      <div className="mb-4 rounded-3xl border border-slate-200 bg-white/80 p-4">
+      <div className="mb-4 rounded-3xl border border-slate-200 bg-white/85 p-4">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Total</p>
         <div className="mt-2 flex items-end justify-between">
           <p className="text-2xl font-bold text-slate-900">${totalAmount.toFixed(2)}</p>
@@ -59,7 +59,7 @@ const OrderPanel = ({ orders, loading, currentUser, onRefresh, onCancel }) => {
           {orders.map((order) => (
             <article
               key={order.id}
-              className="rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="rounded-3xl border border-slate-200 bg-white/85 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <span className="font-mono text-xs text-slate-500">{order.id?.slice(0, 8)}...</span>

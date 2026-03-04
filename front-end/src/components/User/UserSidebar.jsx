@@ -18,13 +18,13 @@ const UserSidebar = ({ currentUser, users, orders }) => {
   const isAdmin = currentUser?.role === 'ADMIN';
 
   return (
-    <aside className="glass-panel rounded-[32px] border p-5 md:p-6">
+    <aside className="panel-surface rounded-[32px] border p-5 md:p-6">
       <div className="mb-5 flex items-center gap-2 text-slate-900">
         <RoleIcon className="h-5 w-5 text-sky-700" />
         <h2 className="text-lg font-semibold">{roleTitle[currentUser?.role] || 'Thông tin user'}</h2>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white/80 p-4">
+      <div className="rounded-3xl border border-slate-200 bg-white/85 p-4">
         <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Current profile</p>
         <p className="mt-2 text-lg font-bold text-slate-900">{currentUser?.name}</p>
         <p className="text-sm text-slate-600">{currentUser?.email}</p>
@@ -33,14 +33,14 @@ const UserSidebar = ({ currentUser, users, orders }) => {
         </p>
       </div>
 
-      <div className="mt-4 rounded-3xl border border-slate-200 bg-white/80 p-4">
+      <div className="mt-4 rounded-3xl border border-slate-200 bg-white/85 p-4">
         <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Snapshot</p>
         <p className="mt-2 text-sm text-slate-700">Sản phẩm khả dụng được tải theo thời gian thực.</p>
         <p className="mt-1 text-sm text-slate-700">Tổng đơn hiển thị: {orders?.length || 0}</p>
       </div>
 
       {isAdmin && (
-        <div className="mt-4 rounded-3xl border border-slate-200 bg-white/80 p-4">
+        <div className="mt-4 rounded-3xl border border-slate-200 bg-white/85 p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
             <Users2 className="h-4 w-4 text-sky-700" />
             User đang hoạt động ({users.length})
