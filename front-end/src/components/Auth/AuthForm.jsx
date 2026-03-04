@@ -25,7 +25,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
         </div>
 
         <h2 className="text-center text-[34px] font-bold leading-[1.05] text-slate-900 md:text-[38px]">
-          Cold Blue Commerce Studio
+          E-commerce Microservices
         </h2>
         <p className="mt-2 text-center text-sm text-slate-500">
           {isLoginView ? 'Đăng nhập để truy cập toàn bộ microservices' : 'Tạo tài khoản mới cho workflow của bạn'}
@@ -40,7 +40,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
                 placeholder="Họ và tên"
                 required
                 value={formData.name}
-                className="w-full rounded-2xl border border-sky-100/70 bg-white/80 py-3 pl-11 pr-4 text-sm font-medium outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200"
+                className="auth-input w-full py-3 pl-11 pr-4 text-sm font-medium outline-none"
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </label>
@@ -53,7 +53,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
               placeholder="Email"
               required
               value={formData.email}
-              className="w-full rounded-2xl border border-sky-100/70 bg-white/80 py-3 pl-11 pr-4 text-sm font-medium outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200"
+              className="auth-input w-full py-3 pl-11 pr-4 text-sm font-medium outline-none"
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             />
           </label>
@@ -65,7 +65,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
               placeholder="Mật khẩu"
               required
               value={formData.password}
-              className="w-full rounded-2xl border border-sky-100/70 bg-white/80 py-3 pl-11 pr-11 text-sm font-medium outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200"
+              className="auth-input w-full py-3 pl-11 pr-11 text-sm font-medium outline-none"
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
             />
             <button
@@ -83,7 +83,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
               <ShieldCheck className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <select
                 value={formData.role}
-                className="w-full appearance-none rounded-2xl border border-sky-100/70 bg-white/80 py-3 pl-11 pr-4 text-sm font-medium outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200"
+                className="auth-input w-full appearance-none py-3 pl-11 pr-4 text-sm font-medium outline-none"
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               >
                 <option value="CUSTOMER">Customer</option>
@@ -107,11 +107,11 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
           <button
             disabled={loading}
             type="submit"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-600 to-blue-700 px-4 py-3 font-semibold text-white transition hover:from-sky-700 hover:to-blue-800 disabled:cursor-not-allowed disabled:from-slate-400 disabled:to-slate-500"
-          >
-            {isLoginView ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-            {loading ? 'Đang xử lý...' : isLoginView ? 'Cold Blue' : 'Tạo tài khoản'}
-          </button>
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-600 to-blue-700 px-4 py-3 font-semibold text-white transition hover:from-sky-700 hover:to-blue-800 disabled:cursor-not-allowed disabled:from-slate-400 disabled:to-slate-500"
+        >
+          {isLoginView ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+          {loading ? 'Đang xử lý...' : isLoginView ? 'Đăng nhập' : 'Tạo tài khoản'}
+        </button>
         </form>
 
         <p className="mt-5 text-center text-sm text-slate-500">
