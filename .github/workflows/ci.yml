@@ -171,7 +171,7 @@ jobs:
                 -v "$PWD/${{ matrix.service.dir }}:/app" \
                 -w /app \
                 golang:1.24-alpine \
-                sh -lc "export PATH=/usr/local/go/bin:$PATH && go version && go test ./..."
+                sh -lc "go test ./..."
               ;;
             frontend)
               docker run --rm \
