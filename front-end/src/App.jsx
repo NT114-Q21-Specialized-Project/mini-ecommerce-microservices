@@ -532,7 +532,17 @@ function App() {
   const fetchProducts = async () => {
     try {
       const res = await axios.get(`${GATEWAY_URL}/products`);
-      setProducts(Array.isArray(res.data) ? res.data : []);
+      if (Array.isArray(res.data)) {
+        setProducts(res.data);
+        return;
+      }
+
+      if (Array.isArray(res.data?.items)) {
+        setProducts(res.data.items);
+        return;
+      }
+
+      setProducts([]);
     } catch (err) {
       showMsg('error', extractErrorMessage(err, 'Không thể tải danh sách sản phẩm'));
     }

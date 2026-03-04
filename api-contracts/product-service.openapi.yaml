@@ -5,19 +5,73 @@ info:
 servers:
   - url: http://localhost:9000
 paths:
-  /api/products:
+  /api/v1/products:
     get:
       summary: List products
       tags: [Products]
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - in: query
+          name: size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum: [createdAt, name, price, stock]
+            default: createdAt
+        - in: query
+          name: sortDir
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: name
+          schema:
+            type: string
+        - in: query
+          name: minPrice
+          schema:
+            type: number
+            minimum: 0.01
+        - in: query
+          name: maxPrice
+          schema:
+            type: number
+            minimum: 0.01
+        - in: query
+          name: minStock
+          schema:
+            type: integer
+            minimum: 0
+        - in: query
+          name: maxStock
+          schema:
+            type: integer
+            minimum: 0
       responses:
         '200':
-          description: Product list
+          description: Product page
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Product'
+                $ref: '#/components/schemas/ProductPageResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       summary: Create product
       tags: [Products]
@@ -36,9 +90,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Product'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Forbidden
-  /api/products/{id}:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/products/{id}:
     get:
       summary: Get product by id
       tags: [Products]
@@ -58,6 +122,10 @@ paths:
                 $ref: '#/components/schemas/Product'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -92,5 +160,43 @@ components:
         stock:
           type: integer
         createdAt:
+          type: string
+          format: date-time
+    ProductPageResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+        sortBy:
+          type: string
+        sortDir:
+          type: string
+        hasNext:
+          type: boolean
+        hasPrevious:
+          type: boolean
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        path:
+          type: string
+        timestamp:
           type: string
           format: date-time

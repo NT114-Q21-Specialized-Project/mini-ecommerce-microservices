@@ -3,7 +3,7 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:9000}"
 SUFFIX="$(date +%s)"
-PASSWORD="123456"
+PASSWORD="${PASSWORD:-Password@123}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -84,8 +84,36 @@ assert_code "$code" "403" "customer cannot create product" "$TMP_DIR/product_cre
 code=$(request GET "/api/v1/products" "$TMP_DIR/product_list.out")
 assert_code "$code" "200" "list products" "$TMP_DIR/product_list.out"
 
+if jq -e --arg id "$PRODUCT_ID" 'if type=="array" then any(.[]; .id == $id) else any((.items // [] )[]; .id == $id) end' "$TMP_DIR/product_list.out" >/dev/null; then
+  echo "[PASS] list contains created product"
+else
+  echo "[FAIL] list does not contain created product"
+  cat "$TMP_DIR/product_list.out"
+  exit 1
+fi
+
 code=$(request GET "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_get.out")
 assert_code "$code" "200" "get product by id" "$TMP_DIR/product_get.out"
+
+code=$(request GET "/api/v1/products?page=0&size=5&sortBy=price&sortDir=desc&name=Smoke" "$TMP_DIR/product_page.out")
+assert_code "$code" "200" "list products with pagination/filter/sort" "$TMP_DIR/product_page.out"
+if jq -e '.items and (.page == 0) and (.size == 5)' "$TMP_DIR/product_page.out" >/dev/null; then
+  echo "[PASS] paginated response shape"
+else
+  echo "[FAIL] invalid paginated response shape"
+  cat "$TMP_DIR/product_page.out"
+  exit 1
+fi
+
+code=$(request GET "/api/v1/products?sortBy=invalidField" "$TMP_DIR/product_invalid_sort.out")
+assert_code "$code" "400" "invalid sortBy returns validation error" "$TMP_DIR/product_invalid_sort.out"
+if jq -e '.error.code == "INVALID_SORT_FIELD"' "$TMP_DIR/product_invalid_sort.out" >/dev/null; then
+  echo "[PASS] invalid sortBy error code"
+else
+  echo "[FAIL] invalid sortBy error payload"
+  cat "$TMP_DIR/product_invalid_sort.out"
+  exit 1
+fi
 
 echo "----- SUMMARY -----"
 echo "PRODUCT_ID=$PRODUCT_ID"

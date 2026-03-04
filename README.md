@@ -110,7 +110,7 @@ http://localhost:9000
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/api/products` | Public | List products |
+| GET | `/api/products` | Public | List products (supports `page,size,sortBy,sortDir,name,minPrice,maxPrice,minStock,maxStock`) |
 | GET | `/api/products/{id}` | Public | Get product detail |
 | POST | `/api/products` | Bearer JWT (`SELLER/ADMIN`) | Create product |
 | POST | `/api/products/{id}/decrease-stock?quantity=n` | Internal | Decrease stock |

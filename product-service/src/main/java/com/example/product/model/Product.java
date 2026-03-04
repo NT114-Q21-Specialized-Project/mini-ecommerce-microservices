@@ -1,6 +1,5 @@
 package com.example.product.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
@@ -11,7 +10,6 @@ public class Product {
 
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY) // Không nhận id từ client gửi lên
     private UUID id;
 
     @Column(nullable = false)
@@ -23,9 +21,22 @@ public class Product {
     @Column(nullable = false)
     private Integer stock;
 
+    @Version
+    @Column(nullable = false, columnDefinition = "bigint default 0")
+    private Long version = 0L;
+
     @Column(name = "created_at", updatable = false)
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY) // Không nhận createdAt từ client
-    private Instant createdAt = Instant.now();
+    private Instant createdAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
+        if (version == null) {
+            version = 0L;
+        }
+    }
 
     public UUID getId() {
         return id;
@@ -61,5 +72,9 @@ public class Product {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 }
