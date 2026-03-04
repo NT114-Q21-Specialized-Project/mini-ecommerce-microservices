@@ -1,6 +1,16 @@
 package com.example.order.model;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Lob;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -9,7 +19,7 @@ import java.util.UUID;
 @Table(
         name = "outbox_events",
         indexes = {
-                @Index(name = "idx_outbox_status_created_at", columnList = "status, created_at")
+                @Index(name = "idx_outbox_status_next_attempt_created", columnList = "status, next_attempt_at, created_at")
         }
 )
 public class OutboxEvent {
@@ -31,8 +41,9 @@ public class OutboxEvent {
     @Column(nullable = false)
     private String payload;
 
-    @Column(nullable = false, length = 32)
-    private String status = "PENDING";
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32, columnDefinition = "varchar(32)")
+    private OutboxStatus status = OutboxStatus.PENDING;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -40,10 +51,28 @@ public class OutboxEvent {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount = 0;
+
+    @Column(name = "last_error", length = 1000)
+    private String lastError;
+
+    @Column(name = "next_attempt_at", nullable = false)
+    private Instant nextAttemptAt;
+
+    @Column(name = "correlation_id", length = 128)
+    private String correlationId;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {
             createdAt = Instant.now();
+        }
+        if (retryCount == null) {
+            retryCount = 0;
+        }
+        if (nextAttemptAt == null) {
+            nextAttemptAt = createdAt;
         }
     }
 
@@ -83,11 +112,11 @@ public class OutboxEvent {
         this.payload = payload;
     }
 
-    public String getStatus() {
+    public OutboxStatus getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(OutboxStatus status) {
         this.status = status;
     }
 
@@ -101,5 +130,37 @@ public class OutboxEvent {
 
     public void setPublishedAt(Instant publishedAt) {
         this.publishedAt = publishedAt;
+    }
+
+    public Integer getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(Integer retryCount) {
+        this.retryCount = retryCount;
+    }
+
+    public String getLastError() {
+        return lastError;
+    }
+
+    public void setLastError(String lastError) {
+        this.lastError = lastError;
+    }
+
+    public Instant getNextAttemptAt() {
+        return nextAttemptAt;
+    }
+
+    public void setNextAttemptAt(Instant nextAttemptAt) {
+        this.nextAttemptAt = nextAttemptAt;
+    }
+
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public void setCorrelationId(String correlationId) {
+        this.correlationId = correlationId;
     }
 }

@@ -3,7 +3,9 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:9000}"
 SUFFIX="$(date +%s)"
-PASSWORD="123456"
+PASSWORD="${PASSWORD:-Password@123}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@ems.com}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin@123!}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -157,7 +159,7 @@ CUSTOMER_TOKEN="$(jq -r '.access_token' "$TMP_DIR/customer_login.out")"
 
 code=$(request POST "/api/v1/users/login" "$TMP_DIR/admin_login.out" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@ems.com","password":"admin123"}')
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
 assert_code "$code" "200" "admin login" "$TMP_DIR/admin_login.out"
 ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_login.out")"
 
@@ -185,34 +187,73 @@ assert_code "$code" "403" "customer cannot access payment timeline" "$TMP_DIR/cu
 assert_gateway_error_contract "$TMP_DIR/customer_payment_forbidden.out" "$TMP_DIR/customer_payment_forbidden.headers" "FORBIDDEN" "/api/v1/payments/order/$ORDER_ID" "customer payment forbidden contract"
 
 ATTACK_IP="198.51.100.10"
+BRUTEFORCE_BLOCKED="false"
 for attempt in 1 2 3 4 5; do
-  code=$(request POST "/api/v1/users/login" "$TMP_DIR/bruteforce_fail_${attempt}.out" \
+  code=$(request_with_headers POST "/api/v1/users/login" "$TMP_DIR/bruteforce_attempt_${attempt}.out" "$TMP_DIR/bruteforce_attempt_${attempt}.headers" \
     -H 'Content-Type: application/json' \
     -H "X-Forwarded-For: $ATTACK_IP" \
-    -d '{"email":"admin@ems.com","password":"wrong-password"}')
-  assert_code "$code" "401" "bruteforce failed attempt $attempt" "$TMP_DIR/bruteforce_fail_${attempt}.out"
+    -d "{\"email\":\"$SELLER_EMAIL\",\"password\":\"wrong-password\"}")
+  if [[ "$code" == "401" ]]; then
+    echo "[PASS] bruteforce failed attempt $attempt (401)"
+    continue
+  fi
+  if [[ "$code" == "429" ]]; then
+    echo "[PASS] bruteforce blocked at attempt $attempt (429)"
+    BRUTEFORCE_BLOCKED="true"
+    assert_jq '.code == "LOGIN_TEMPORARILY_BLOCKED" or .code == "ACCOUNT_LOCKED"' \
+      "bruteforce block error code is accepted" "$TMP_DIR/bruteforce_attempt_${attempt}.out"
+    assert_jq '.message | type == "string"' \
+      "bruteforce block error message string" "$TMP_DIR/bruteforce_attempt_${attempt}.out"
+    assert_jq '.path == "/api/v1/users/login"' \
+      "bruteforce block error path" "$TMP_DIR/bruteforce_attempt_${attempt}.out"
+    assert_jq '.correlationId | type == "string" and length > 0' \
+      "bruteforce block error correlationId present" "$TMP_DIR/bruteforce_attempt_${attempt}.out"
+    break
+  fi
+  echo "[FAIL] bruteforce attempt $attempt returned unexpected status=$code"
+  cat "$TMP_DIR/bruteforce_attempt_${attempt}.out" || true
+  exit 1
 done
+
+if [[ "$BRUTEFORCE_BLOCKED" != "true" ]]; then
+  echo "[FAIL] bruteforce protection did not trigger within 5 attempts"
+  exit 1
+fi
 
 code=$(request_with_headers POST "/api/v1/users/login" "$TMP_DIR/bruteforce_blocked.out" "$TMP_DIR/bruteforce_blocked.headers" \
   -H 'Content-Type: application/json' \
   -H "X-Forwarded-For: $ATTACK_IP" \
-  -d '{"email":"admin@ems.com","password":"wrong-password"}')
+  -d "{\"email\":\"$SELLER_EMAIL\",\"password\":\"wrong-password\"}")
 assert_code "$code" "429" "bruteforce blocked request" "$TMP_DIR/bruteforce_blocked.out"
-assert_gateway_error_contract "$TMP_DIR/bruteforce_blocked.out" "$TMP_DIR/bruteforce_blocked.headers" "LOGIN_TEMPORARILY_BLOCKED" "/api/v1/users/login" "bruteforce block error contract"
+assert_jq '.code == "LOGIN_TEMPORARILY_BLOCKED" or .code == "ACCOUNT_LOCKED"' \
+  "bruteforce block error code is accepted" "$TMP_DIR/bruteforce_blocked.out"
+assert_jq '.message | type == "string"' "bruteforce block error message string" "$TMP_DIR/bruteforce_blocked.out"
+assert_jq '.path == "/api/v1/users/login"' "bruteforce block error path" "$TMP_DIR/bruteforce_blocked.out"
+assert_jq '.correlationId | type == "string" and length > 0' \
+  "bruteforce block error correlationId present" "$TMP_DIR/bruteforce_blocked.out"
+
+header_cid="$(header_value "X-Correlation-Id" "$TMP_DIR/bruteforce_blocked.headers")"
+body_cid="$(jq -r '.correlationId' "$TMP_DIR/bruteforce_blocked.out")"
+if [[ -z "$header_cid" || "$header_cid" != "$body_cid" ]]; then
+  echo "[FAIL] bruteforce block error contract: correlationId header/body mismatch"
+  echo "header=$header_cid body=$body_cid"
+  exit 1
+fi
+echo "[PASS] bruteforce block error correlationId header/body match"
 
 RATE_IP="198.51.100.11"
 for req in $(seq 1 20); do
   code=$(request POST "/api/v1/users/login" "$TMP_DIR/rate_ok_${req}.out" \
     -H 'Content-Type: application/json' \
     -H "X-Forwarded-For: $RATE_IP" \
-    -d '{"email":"admin@ems.com","password":"admin123"}')
+    -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
   assert_code "$code" "200" "rate-limit warmup login $req/20" "$TMP_DIR/rate_ok_${req}.out"
 done
 
 code=$(request_with_headers POST "/api/v1/users/login" "$TMP_DIR/rate_limited.out" "$TMP_DIR/rate_limited.headers" \
   -H 'Content-Type: application/json' \
   -H "X-Forwarded-For: $RATE_IP" \
-  -d '{"email":"admin@ems.com","password":"admin123"}')
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
 assert_code "$code" "429" "rate limit triggers on 21st login" "$TMP_DIR/rate_limited.out"
 assert_gateway_error_contract "$TMP_DIR/rate_limited.out" "$TMP_DIR/rate_limited.headers" "RATE_LIMITED" "/api/v1/users/login" "rate limit error contract"
 

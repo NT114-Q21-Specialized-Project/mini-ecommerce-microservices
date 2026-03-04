@@ -6,6 +6,7 @@ SUFFIX="$(date +%s)"
 PASSWORD="${PASSWORD:-Password@123}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@ems.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin@123!}"
+CLIENT_IP="${CLIENT_IP:-198.51.100.21}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -20,7 +21,9 @@ request() {
   shift 3
   local extra_args=("$@")
 
-  curl -sS -o "$body_file" -w "%{http_code}" -X "$method" "$BASE_URL$path" "${extra_args[@]}"
+  curl -sS -o "$body_file" -w "%{http_code}" -X "$method" "$BASE_URL$path" \
+    -H "X-Forwarded-For: $CLIENT_IP" \
+    "${extra_args[@]}"
 }
 
 assert_code() {

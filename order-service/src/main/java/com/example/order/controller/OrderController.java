@@ -5,6 +5,8 @@ import com.example.order.dto.OrderSagaStepView;
 import com.example.order.dto.OrderWorkflowResponse;
 import com.example.order.dto.PendingOutboxEventView;
 import com.example.order.model.Order;
+import com.example.order.service.IdempotencyConflictException;
+import com.example.order.service.OrderCreationResult;
 import com.example.order.service.OrderService;
 import com.example.order.service.OrderWorkflowException;
 import jakarta.validation.Valid;
@@ -43,7 +45,7 @@ public class OrderController {
         try {
             UUID authenticatedUserId = parseUserId(userIdHeader);
 
-            OrderService.OrderCreationResult result = service.createOrder(
+            OrderCreationResult result = service.createOrder(
                     authenticatedUserId,
                     userRoleHeader,
                     idempotencyKey,
@@ -59,7 +61,7 @@ public class OrderController {
             payload.setSagaSteps(result.getSagaSteps());
 
             return ResponseEntity.status(status).body(payload);
-        } catch (OrderService.IdempotencyConflictException e) {
+        } catch (IdempotencyConflictException e) {
             return error(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT", e.getMessage());
         } catch (SecurityException e) {
             return error(HttpStatus.FORBIDDEN, "FORBIDDEN", e.getMessage());

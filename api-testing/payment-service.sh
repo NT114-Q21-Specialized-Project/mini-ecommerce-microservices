@@ -3,7 +3,10 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:9000}"
 SUFFIX="$(date +%s)"
-PASSWORD="123456"
+PASSWORD="${PASSWORD:-Password@123}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@ems.com}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin@123!}"
+CLIENT_IP="${CLIENT_IP:-198.51.100.24}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -26,7 +29,9 @@ request() {
   shift 3
   local extra_args=("$@")
 
-  curl -sS -o "$body_file" -w "%{http_code}" -X "$method" "$BASE_URL$path" "${extra_args[@]}"
+  curl -sS -o "$body_file" -w "%{http_code}" -X "$method" "$BASE_URL$path" \
+    -H "X-Forwarded-For: $CLIENT_IP" \
+    "${extra_args[@]}"
 }
 
 assert_code() {
@@ -91,7 +96,7 @@ CUSTOMER_TOKEN="$(jq -r '.access_token' "$TMP_DIR/customer_login.out")"
 
 code=$(request POST "/api/v1/users/login" "$TMP_DIR/admin_login.out" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@ems.com","password":"admin123"}')
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
 assert_code "$code" "200" "login seeded admin" "$TMP_DIR/admin_login.out"
 ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_login.out")"
 

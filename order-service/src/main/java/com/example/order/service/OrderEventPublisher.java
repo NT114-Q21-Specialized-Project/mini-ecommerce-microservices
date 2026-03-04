@@ -22,9 +22,9 @@ public class OrderEventPublisher {
         this.structuredLogger = structuredLogger;
     }
 
-    public void publish(String channel, String payload, String correlationId) {
+    public boolean publish(String channel, String payload, String correlationId) {
         if (redisTemplate == null) {
-            return;
+            return true;
         }
 
         try {
@@ -33,12 +33,14 @@ public class OrderEventPublisher {
                     "channel", channel,
                     "correlation_id", correlationId
             ));
+            return true;
         } catch (Exception e) {
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("channel", channel);
             fields.put("correlation_id", correlationId);
             fields.put("error", e.getMessage());
             structuredLogger.warn("order.event.publish_failed", fields);
+            return false;
         }
     }
 }

@@ -46,6 +46,15 @@ chaos:
   delay:
     ms: ${CHAOS_DELAY_MS:0}
 
+outbox:
+  publisher:
+    enabled: ${OUTBOX_PUBLISHER_ENABLED:true}
+    channel: ${OUTBOX_CHANNEL:orders.events}
+    fixed-delay-ms: ${OUTBOX_PUBLISHER_FIXED_DELAY_MS:1000}
+    batch-size: ${OUTBOX_PUBLISHER_BATCH_SIZE:50}
+    max-retry-attempts: ${OUTBOX_PUBLISHER_MAX_RETRY_ATTEMPTS:8}
+    initial-backoff-ms: ${OUTBOX_PUBLISHER_INITIAL_BACKOFF_MS:500}
+
 server:
   port: ${SERVER_PORT:8080}
 

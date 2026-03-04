@@ -1,5 +1,7 @@
 package com.example.order.dto;
 
+import com.example.order.model.OutboxStatus;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -8,7 +10,7 @@ public class PendingOutboxEventView {
     private final String aggregateType;
     private final UUID aggregateId;
     private final String eventType;
-    private final String status;
+    private final OutboxStatus status;
     private final Instant createdAt;
     private final Instant publishedAt;
 
@@ -17,7 +19,7 @@ public class PendingOutboxEventView {
             String aggregateType,
             UUID aggregateId,
             String eventType,
-            String status,
+            OutboxStatus status,
             Instant createdAt,
             Instant publishedAt
     ) {
@@ -46,7 +48,7 @@ public class PendingOutboxEventView {
         return eventType;
     }
 
-    public String getStatus() {
+    public OutboxStatus getStatus() {
         return status;
     }
 
