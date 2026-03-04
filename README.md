@@ -161,6 +161,8 @@ Minimal required values in `.env`:
 
 ```env
 AUTH_JWT_SECRET=<long-random-secret>
+BOOTSTRAP_ADMIN_EMAIL=<admin-email>
+BOOTSTRAP_ADMIN_PASSWORD=<strong-admin-password>
 USER_DB_PASSWORD=<password>
 PRODUCT_DB_PASSWORD=<password>
 ORDER_DB_PASSWORD=<password>
@@ -172,6 +174,13 @@ GRAFANA_ADMIN_PASSWORD=<strong-password>
 
 Optional tuning (already in `.env.example`):
 
+- User auth hardening:
+  - `JWT_EXPIRES_MINUTES`
+  - `JWT_REFRESH_EXPIRES_MINUTES`
+  - `AUTH_MAX_FAILED_ATTEMPTS`
+  - `AUTH_FAILED_ATTEMPT_WINDOW_SECONDS`
+  - `AUTH_LOCKOUT_SECONDS`
+  - `BOOTSTRAP_ADMIN_NAME`
 - Payment behavior:
   - `PAYMENT_FAILURE_PROBABILITY`
   - `PAYMENT_DELAY_MS`

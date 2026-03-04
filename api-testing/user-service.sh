@@ -3,7 +3,9 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:9000}"
 SUFFIX="$(date +%s)"
-PASSWORD="123456"
+PASSWORD="${PASSWORD:-Password@123}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@ems.com}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin@123!}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -69,11 +71,37 @@ assert_code "$code" "400" "reject admin self-register" "$TMP_DIR/admin_create.ou
 
 code=$(request POST "/api/v1/users/login" "$TMP_DIR/admin_login.out" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@ems.com","password":"admin123"}')
-assert_code "$code" "200" "login seeded admin" "$TMP_DIR/admin_login.out"
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
+assert_code "$code" "200" "login bootstrap admin" "$TMP_DIR/admin_login.out"
 ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_login.out")"
+ADMIN_REFRESH_TOKEN="$(jq -r '.refresh_token' "$TMP_DIR/admin_login.out")"
 ADMIN_ID="$(jq -r '.user.id' "$TMP_DIR/admin_login.out")"
 
+AUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
+
+code=$(request POST "/api/v1/users/refresh" "$TMP_DIR/admin_refresh.out" \
+  -H 'Content-Type: application/json' \
+  -d "{\"refresh_token\":\"$ADMIN_REFRESH_TOKEN\"}")
+assert_code "$code" "200" "refresh access token" "$TMP_DIR/admin_refresh.out"
+ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_refresh.out")"
+ADMIN_REFRESH_TOKEN="$(jq -r '.refresh_token' "$TMP_DIR/admin_refresh.out")"
+AUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
+
+code=$(request POST "/api/v1/users/logout" "$TMP_DIR/admin_logout.out" \
+  -H 'Content-Type: application/json' \
+  -d "{\"refresh_token\":\"$ADMIN_REFRESH_TOKEN\"}")
+assert_code "$code" "204" "logout revoke refresh token" "$TMP_DIR/admin_logout.out"
+
+code=$(request POST "/api/v1/users/refresh" "$TMP_DIR/admin_refresh_revoked.out" \
+  -H 'Content-Type: application/json' \
+  -d "{\"refresh_token\":\"$ADMIN_REFRESH_TOKEN\"}")
+assert_code "$code" "401" "reject revoked refresh token" "$TMP_DIR/admin_refresh_revoked.out"
+
+code=$(request POST "/api/v1/users/login" "$TMP_DIR/admin_login_2.out" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
+assert_code "$code" "200" "login admin again" "$TMP_DIR/admin_login_2.out"
+ADMIN_TOKEN="$(jq -r '.access_token' "$TMP_DIR/admin_login_2.out")"
 AUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
 
 code=$(request GET "/api/v1/users" "$TMP_DIR/users_list_1.out" "${AUTH[@]}")

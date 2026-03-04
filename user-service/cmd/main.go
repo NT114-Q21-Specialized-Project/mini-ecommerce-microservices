@@ -118,13 +118,38 @@ func main() {
 		log.Fatal("JWT_SECRET is required")
 	}
 	jwtExpiryMinutes := getEnvInt("JWT_EXPIRES_MINUTES", 120)
+	refreshExpiryMinutes := getEnvInt("JWT_REFRESH_EXPIRES_MINUTES", 10080)
+	maxFailedAttempts := getEnvInt("AUTH_MAX_FAILED_ATTEMPTS", 5)
+	failedWindowSeconds := getEnvInt("AUTH_FAILED_ATTEMPT_WINDOW_SECONDS", 900)
+	lockoutSeconds := getEnvInt("AUTH_LOCKOUT_SECONDS", 900)
 
 	repo := repository.NewUserRepository(cfg.DB)
 	svc := service.NewUserService(
 		repo,
 		jwtSecret,
 		time.Duration(jwtExpiryMinutes)*time.Minute,
+		service.AuthPolicy{
+			MaxFailedAttempts:   maxFailedAttempts,
+			FailedAttemptWindow: time.Duration(failedWindowSeconds) * time.Second,
+			LockoutDuration:     time.Duration(lockoutSeconds) * time.Second,
+			RefreshTokenTTL:     time.Duration(refreshExpiryMinutes) * time.Minute,
+		},
 	)
+
+	bootstrapAdminEmail := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL"))
+	bootstrapAdminPassword := os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
+	bootstrapAdminName := getEnv("BOOTSTRAP_ADMIN_NAME", "Super Admin")
+
+	if bootstrapAdminEmail != "" || bootstrapAdminPassword != "" {
+		if bootstrapAdminEmail == "" || strings.TrimSpace(bootstrapAdminPassword) == "" {
+			log.Fatal("BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD must be provided together")
+		}
+		if err := svc.BootstrapAdmin(bootstrapAdminName, bootstrapAdminEmail, bootstrapAdminPassword); err != nil {
+			log.Fatalf("failed to bootstrap admin account: %v", err)
+		}
+		log.Printf("bootstrap admin account ensured for %s", bootstrapAdminEmail)
+	}
+
 	h := handler.NewUserHandler(svc)
 
 	// =========================
@@ -141,6 +166,8 @@ func main() {
 	// AUTH
 	// =========================
 	r.HandleFunc("/users/login", h.Login).Methods("POST")
+	r.HandleFunc("/users/refresh", h.RefreshToken).Methods("POST")
+	r.HandleFunc("/users/logout", h.Logout).Methods("POST")
 
 	// =========================
 	// PUBLIC USER APIs

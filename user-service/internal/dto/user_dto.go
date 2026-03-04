@@ -29,10 +29,16 @@ type UserResponse struct {
 }
 
 type LoginResponse struct {
-	AccessToken string       `json:"access_token"`
-	TokenType   string       `json:"token_type"`
-	ExpiresAt   int64        `json:"expires_at"`
-	User        UserResponse `json:"user"`
+	AccessToken      string       `json:"access_token"`
+	TokenType        string       `json:"token_type"`
+	ExpiresAt        int64        `json:"expires_at"`
+	RefreshToken     string       `json:"refresh_token,omitempty"`
+	RefreshExpiresAt int64        `json:"refresh_expires_at,omitempty"`
+	User             UserResponse `json:"user"`
+}
+
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token"`
 }
 
 type PaginationMeta struct {

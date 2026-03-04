@@ -35,18 +35,58 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, accessToken, expiresAt, err := h.service.Login(req.Email, req.Password)
+	user, accessToken, expiresAt, refreshToken, refreshExpiresAt, err := h.service.Login(req.Email, req.Password)
 	if err != nil {
 		h.handleServiceError(w, r, err)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, dto.LoginResponse{
-		AccessToken: accessToken,
-		TokenType:   "Bearer",
-		ExpiresAt:   expiresAt,
-		User:        toUserResponse(*user),
+		AccessToken:      accessToken,
+		TokenType:        "Bearer",
+		ExpiresAt:        expiresAt,
+		RefreshToken:     refreshToken,
+		RefreshExpiresAt: refreshExpiresAt,
+		User:             toUserResponse(*user),
 	})
+}
+
+func (h *UserHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var req dto.RefreshTokenRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	user, accessToken, expiresAt, refreshToken, refreshExpiresAt, err := h.service.RefreshToken(req.RefreshToken)
+	if err != nil {
+		h.handleServiceError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto.LoginResponse{
+		AccessToken:      accessToken,
+		TokenType:        "Bearer",
+		ExpiresAt:        expiresAt,
+		RefreshToken:     refreshToken,
+		RefreshExpiresAt: refreshExpiresAt,
+		User:             toUserResponse(*user),
+	})
+}
+
+func (h *UserHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var req dto.RefreshTokenRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, r, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	if err := h.service.RevokeRefreshToken(req.RefreshToken); err != nil {
+		h.handleServiceError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
@@ -312,6 +352,10 @@ func (h *UserHandler) handleServiceError(w http.ResponseWriter, r *http.Request,
 	switch {
 	case errors.As(err, &validationErr):
 		writeError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", validationErr.Message)
+	case errors.Is(err, service.ErrAccountLocked):
+		writeError(w, r, http.StatusTooManyRequests, "ACCOUNT_LOCKED", "account is temporarily locked due to failed login attempts")
+	case errors.Is(err, service.ErrInvalidRefreshToken):
+		writeError(w, r, http.StatusUnauthorized, "INVALID_REFRESH_TOKEN", "invalid or expired refresh token")
 	case errors.Is(err, service.ErrInvalidCredentials):
 		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "invalid email or password")
 	case errors.Is(err, service.ErrEmailAlreadyExists):

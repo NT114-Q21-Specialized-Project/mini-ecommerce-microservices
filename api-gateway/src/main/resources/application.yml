@@ -139,6 +139,12 @@ security:
       - id: user-login
         path-pattern: /api/v1/users/login
         methods: [POST]
+      - id: user-refresh
+        path-pattern: /api/v1/users/refresh
+        methods: [POST]
+      - id: user-logout
+        path-pattern: /api/v1/users/logout
+        methods: [POST]
       - id: product-read
         path-pattern: /api/v1/products/**
         methods: [GET]

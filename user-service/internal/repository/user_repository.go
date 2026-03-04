@@ -1,10 +1,12 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/lib/pq"
 
@@ -12,8 +14,11 @@ import (
 )
 
 var (
-	ErrUserNotFound  = errors.New("user not found")
-	ErrEmailConflict = errors.New("email already exists")
+	ErrUserNotFound         = errors.New("user not found")
+	ErrEmailConflict        = errors.New("email already exists")
+	ErrRefreshTokenNotFound = errors.New("refresh token not found")
+	ErrRefreshTokenExpired  = errors.New("refresh token expired")
+	ErrRefreshTokenRevoked  = errors.New("refresh token revoked")
 )
 
 type ListUsersParams struct {
@@ -136,9 +141,22 @@ func (r *UserRepository) Create(user *model.User) error {
 
 func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
 	var user model.User
+	var failedWindowStart sql.NullTime
+	var lockedUntil sql.NullTime
+
 	err := r.db.QueryRow(
 		`
-        SELECT id, name, email, password, role, is_active, created_at
+        SELECT
+            id,
+            name,
+            email,
+            password,
+            role,
+            is_active,
+            created_at,
+            failed_login_attempts,
+            failed_login_window_started_at,
+            locked_until
         FROM users
         WHERE email = $1 AND is_active = true
         `,
@@ -151,6 +169,9 @@ func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
 		&user.Role,
 		&user.IsActive,
 		&user.CreatedAt,
+		&user.FailedLoginAttempts,
+		&failedWindowStart,
+		&lockedUntil,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -158,6 +179,15 @@ func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	if failedWindowStart.Valid {
+		t := failedWindowStart.Time
+		user.FailedLoginWindowStartedAt = &t
+	}
+	if lockedUntil.Valid {
+		t := lockedUntil.Time
+		user.LockedUntil = &t
 	}
 
 	return &user, nil
@@ -309,6 +339,32 @@ func (r *UserRepository) FindByEmailPublic(email string) (*model.User, error) {
 	return &user, nil
 }
 
+func (r *UserRepository) FindByEmailAnyStatus(email string) (*model.User, error) {
+	var user model.User
+	err := r.db.QueryRow(`
+        SELECT id, name, email, password, role, is_active, created_at
+        FROM users
+        WHERE email = $1
+    `, email).Scan(
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.Password,
+		&user.Role,
+		&user.IsActive,
+		&user.CreatedAt,
+	)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
 func (r *UserRepository) EmailExists(email string) (bool, error) {
 	var exists bool
 	err := r.db.QueryRow(`
@@ -434,6 +490,171 @@ func (r *UserRepository) ValidateUser(id string) (bool, string, bool, error) {
 	}
 
 	return exists, role, active, nil
+}
+
+func (r *UserRepository) RegisterFailedLoginAttempt(
+	userID string,
+	now time.Time,
+	window time.Duration,
+	maxAttempts int,
+	lockoutDuration time.Duration,
+) (bool, error) {
+	if maxAttempts <= 0 {
+		maxAttempts = 1
+	}
+
+	cutoff := now.Add(-window)
+	lockedUntilCandidate := now.Add(lockoutDuration)
+
+	var lockedUntil sql.NullTime
+	err := r.db.QueryRow(`
+        UPDATE users
+        SET
+            failed_login_attempts = CASE
+                WHEN failed_login_window_started_at IS NULL OR failed_login_window_started_at < $2 THEN 1
+                ELSE failed_login_attempts + 1
+            END,
+            failed_login_window_started_at = CASE
+                WHEN failed_login_window_started_at IS NULL OR failed_login_window_started_at < $2 THEN $1
+                ELSE failed_login_window_started_at
+            END,
+            locked_until = CASE
+                WHEN (
+                    CASE
+                        WHEN failed_login_window_started_at IS NULL OR failed_login_window_started_at < $2 THEN 1
+                        ELSE failed_login_attempts + 1
+                    END
+                ) >= $3 THEN $4
+                ELSE locked_until
+            END
+        WHERE id = $5
+        RETURNING locked_until
+    `, now, cutoff, maxAttempts, lockedUntilCandidate, userID).Scan(&lockedUntil)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, ErrUserNotFound
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return lockedUntil.Valid && lockedUntil.Time.After(now), nil
+}
+
+func (r *UserRepository) ResetFailedLoginAttempts(userID string) error {
+	result, err := r.db.Exec(`
+        UPDATE users
+        SET
+            failed_login_attempts = 0,
+            failed_login_window_started_at = NULL,
+            locked_until = NULL
+        WHERE id = $1
+    `, userID)
+	if err != nil {
+		return err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
+}
+
+func (r *UserRepository) StoreRefreshToken(userID, tokenHash string, expiresAt time.Time) error {
+	_, err := r.db.Exec(`
+        INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+        VALUES ($1, $2, $3)
+    `, userID, tokenHash, expiresAt)
+	return err
+}
+
+func (r *UserRepository) RotateRefreshToken(
+	oldTokenHash string,
+	newTokenHash string,
+	newExpiresAt time.Time,
+	now time.Time,
+) (string, error) {
+	tx, err := r.db.BeginTx(context.Background(), &sql.TxOptions{})
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var userID string
+	var expiresAt time.Time
+	var revokedAt sql.NullTime
+
+	err = tx.QueryRow(`
+        SELECT user_id, expires_at, revoked_at
+        FROM refresh_tokens
+        WHERE token_hash = $1
+        FOR UPDATE
+    `, oldTokenHash).Scan(&userID, &expiresAt, &revokedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrRefreshTokenNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if revokedAt.Valid {
+		return "", ErrRefreshTokenRevoked
+	}
+	if !expiresAt.After(now) {
+		_, _ = tx.Exec(`
+            UPDATE refresh_tokens
+            SET revoked_at = COALESCE(revoked_at, $2)
+            WHERE token_hash = $1
+        `, oldTokenHash, now)
+		return "", ErrRefreshTokenExpired
+	}
+
+	if _, err = tx.Exec(`
+        UPDATE refresh_tokens
+        SET revoked_at = $2, replaced_by_hash = $3
+        WHERE token_hash = $1
+    `, oldTokenHash, now, newTokenHash); err != nil {
+		return "", err
+	}
+
+	if _, err = tx.Exec(`
+        INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+        VALUES ($1, $2, $3)
+    `, userID, newTokenHash, newExpiresAt); err != nil {
+		return "", err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return "", err
+	}
+
+	return userID, nil
+}
+
+func (r *UserRepository) RevokeRefreshToken(tokenHash string, now time.Time) error {
+	result, err := r.db.Exec(`
+        UPDATE refresh_tokens
+        SET revoked_at = COALESCE(revoked_at, $2)
+        WHERE token_hash = $1
+    `, tokenHash, now)
+	if err != nil {
+		return err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrRefreshTokenNotFound
+	}
+
+	return nil
 }
 
 func normalizeSortBy(sortBy string) string {
