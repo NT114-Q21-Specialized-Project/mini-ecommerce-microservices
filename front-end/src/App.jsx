@@ -13,7 +13,6 @@ import {
   Users2,
 } from 'lucide-react';
 
-import Header from './components/Layout/Header';
 import Message from './components/Layout/Message';
 import AuthForm from './components/Auth/AuthForm';
 import UserSidebar from './components/User/UserSidebar';
@@ -687,22 +686,37 @@ function App() {
   };
 
   return (
-    <div className="app-shell min-h-screen px-3 pb-10 pt-4 md:px-6">
-      <div className="mx-auto w-full max-w-[1400px]">
+    <div
+      className={`app-shell min-h-screen ${currentUser ? 'px-3 pb-10 pt-4 md:px-6' : 'px-3 py-5 md:px-6 md:py-8'}`}
+    >
+      <div className={`mx-auto w-full ${currentUser ? 'max-w-[1400px]' : 'max-w-[1180px]'}`}>
         <Message message={message} />
 
         {!currentUser ? (
-          <>
-            <Header currentUser={currentUser} session={session} onLogout={handleLogout} />
-            <AuthForm
-              isLoginView={isLoginView}
-              setIsLoginView={setIsLoginView}
-              formData={formData}
-              setFormData={setFormData}
-              handleAuth={handleAuth}
-              loading={loading}
-            />
-          </>
+          <section className="auth-stage">
+            <div className="auth-frame">
+              <div className="hidden space-y-3 px-2 lg:block">
+                <p className="inline-flex items-center rounded-full border border-sky-200/70 bg-white/75 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-sky-700">
+                  Store Operations
+                </p>
+                <h1 className="text-4xl font-bold leading-tight text-slate-900 xl:text-5xl">
+                  A calm place to control your ecommerce platform.
+                </h1>
+                <p className="max-w-[480px] text-sm text-slate-600">
+                  Đăng nhập để quản lý user, sản phẩm và đơn hàng từ một dashboard thống nhất.
+                </p>
+              </div>
+
+              <AuthForm
+                isLoginView={isLoginView}
+                setIsLoginView={setIsLoginView}
+                formData={formData}
+                setFormData={setFormData}
+                handleAuth={handleAuth}
+                loading={loading}
+              />
+            </div>
+          </section>
         ) : (
           <div className="grid gap-6 lg:grid-cols-[88px_minmax(0,1fr)_360px]">
             <aside className="glass-panel hidden h-fit flex-col items-center gap-6 rounded-[32px] border px-4 py-6 text-slate-600 lg:flex">

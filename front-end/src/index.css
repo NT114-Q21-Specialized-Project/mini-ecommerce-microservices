@@ -64,6 +64,74 @@ h3 {
   backdrop-filter: blur(12px);
 }
 
+.auth-stage {
+  position: relative;
+  display: grid;
+  min-height: calc(100vh - 110px);
+  place-items: center;
+  overflow: hidden;
+  border-radius: 36px;
+  border: 1px solid rgba(186, 230, 253, 0.65);
+  background:
+    radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.75), transparent 42%),
+    radial-gradient(circle at 82% 15%, rgba(125, 211, 252, 0.26), transparent 46%),
+    linear-gradient(160deg, rgba(247, 253, 255, 0.94), rgba(225, 243, 255, 0.86));
+  box-shadow: 0 30px 90px rgba(30, 64, 175, 0.12);
+}
+
+.auth-stage::before,
+.auth-stage::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.auth-stage::before {
+  width: 420px;
+  height: 420px;
+  right: -160px;
+  top: -120px;
+  background: radial-gradient(circle, rgba(125, 211, 252, 0.5), rgba(125, 211, 252, 0));
+}
+
+.auth-stage::after {
+  width: 340px;
+  height: 340px;
+  left: -130px;
+  bottom: -140px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.18), rgba(59, 130, 246, 0));
+}
+
+.auth-frame {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1080px;
+  display: grid;
+  gap: 2rem;
+  padding: 1.25rem;
+}
+
+.auth-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 250, 255, 0.94));
+  border-color: rgba(186, 230, 253, 0.75);
+  backdrop-filter: blur(12px);
+}
+
+.auth-pill {
+  border: 1px solid rgba(147, 197, 253, 0.55);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+@media (min-width: 1024px) {
+  .auth-frame {
+    grid-template-columns: 1.05fr 0.95fr;
+    align-items: center;
+    padding: 2rem 2.4rem;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 10px;
 }
