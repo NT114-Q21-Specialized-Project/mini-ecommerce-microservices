@@ -2,12 +2,13 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,27 +16,41 @@ import (
 	"inventory-service/internal/middleware"
 	"inventory-service/internal/model"
 	"inventory-service/internal/repository"
+
+	"github.com/google/uuid"
 )
 
 const (
-	operationReserve   = "RESERVE"
-	operationRelease   = "RELEASE"
-	statusInProgress   = "IN_PROGRESS"
-	statusSuccess      = "SUCCESS"
-	statusFailed       = "FAILED"
-	serviceStatusResv  = "RESERVED"
-	serviceStatusRel   = "RELEASED"
-	httpConflictStatus = http.StatusConflict
+	operationReserve              = "RESERVE"
+	operationRelease              = "RELEASE"
+	statusInProgress              = "IN_PROGRESS"
+	statusSuccess                 = "SUCCESS"
+	statusFailed                  = "FAILED"
+	serviceStatusResv             = "RESERVED"
+	serviceStatusRel              = "RELEASED"
+	httpConflictStatus            = http.StatusConflict
+	defaultIdempotencyWaitTimeout = 2 * time.Second
+	defaultIdempotencyPollWindow  = 20 * time.Millisecond
 )
 
 type InventoryService struct {
-	repo                  *repository.InventoryRepository
-	httpClient            *http.Client
-	productServiceBaseURL string
-	chaosMode             bool
-	latencyProbability    float64
-	errorProbability      float64
-	chaosDelayMs          int
+	repo                   inventoryStore
+	httpClient             *http.Client
+	productServiceBaseURL  string
+	internalServiceToken   string
+	chaosMode              bool
+	latencyProbability     float64
+	errorProbability       float64
+	chaosDelayMs           int
+	idempotencyWaitTimeout time.Duration
+	idempotencyPollWindow  time.Duration
+}
+
+type inventoryStore interface {
+	ClaimOrGetByIdempotency(operation *model.InventoryOperation) (*model.InventoryOperation, bool, error)
+	FindByIdempotencyKey(idempotencyKey string) (*model.InventoryOperation, error)
+	FindByOrderAndType(orderID string, operationType string) (*model.InventoryOperation, error)
+	UpdateOperationResult(idempotencyKey string, status string, errorCode string, errorMessage string, correlationID string) error
 }
 
 type ProductView struct {
@@ -47,13 +62,16 @@ type ProductView struct {
 
 func NewInventoryService(repo *repository.InventoryRepository, cfg *config.Config) *InventoryService {
 	return &InventoryService{
-		repo:                  repo,
-		httpClient:            &http.Client{Timeout: 8 * time.Second},
-		productServiceBaseURL: cfg.ProductServiceBaseURL,
-		chaosMode:             cfg.ChaosMode,
-		latencyProbability:    cfg.LatencyProbability,
-		errorProbability:      cfg.ErrorProbability,
-		chaosDelayMs:          cfg.ChaosDelayMs,
+		repo:                   repo,
+		httpClient:             &http.Client{Timeout: 8 * time.Second},
+		productServiceBaseURL:  cfg.ProductServiceBaseURL,
+		internalServiceToken:   cfg.InternalServiceToken,
+		chaosMode:              cfg.ChaosMode,
+		latencyProbability:     cfg.LatencyProbability,
+		errorProbability:       cfg.ErrorProbability,
+		chaosDelayMs:           cfg.ChaosDelayMs,
+		idempotencyWaitTimeout: defaultIdempotencyWaitTimeout,
+		idempotencyPollWindow:  defaultIdempotencyPollWindow,
 	}
 }
 
@@ -67,34 +85,21 @@ func (s *InventoryService) Reserve(request *model.ReserveRequest, idempotencyKey
 		return nil, &model.ServiceError{Code: "MISSING_IDEMPOTENCY_KEY", Message: "Idempotency-Key is required", HTTPStatus: http.StatusBadRequest}
 	}
 
-	response, svcErr := s.resolveExistingOperation(
-		idempotencyKey,
-		operationReserve,
-		request.OrderID,
-		request.ProductID,
-		request.Quantity,
-		correlationID,
-		serviceStatusResv,
-	)
-	if response != nil || svcErr != nil {
-		return response, svcErr
-	}
-
 	op := buildOperation(idempotencyKey, operationReserve, request.OrderID, request.ProductID, request.Quantity, correlationID)
-	claimed, err := s.repo.ClaimOperation(op)
+	existing, created, err := s.repo.ClaimOrGetByIdempotency(op)
 	if err != nil {
+		if repository.IsUniqueViolation(err) {
+			if byKey, lookupErr := s.repo.FindByIdempotencyKey(idempotencyKey); lookupErr != nil {
+				return nil, dbServiceError(lookupErr)
+			} else if byKey != nil {
+				return s.handleExistingOperation(byKey, operationReserve, request.OrderID, request.ProductID, request.Quantity, correlationID, serviceStatusResv)
+			}
+			return s.resolveOrderOperationConflict(request.OrderID, operationReserve, idempotencyKey)
+		}
 		return nil, dbServiceError(err)
 	}
-	if !claimed {
-		return s.resolveClaimConflict(
-			idempotencyKey,
-			operationReserve,
-			request.OrderID,
-			request.ProductID,
-			request.Quantity,
-			correlationID,
-			serviceStatusResv,
-		)
+	if !created {
+		return s.handleExistingOperation(existing, operationReserve, request.OrderID, request.ProductID, request.Quantity, correlationID, serviceStatusResv)
 	}
 
 	if chaosErr := s.maybeInjectChaos(correlationID, "reserve"); chaosErr != nil {
@@ -149,34 +154,21 @@ func (s *InventoryService) Release(request *model.ReleaseRequest, idempotencyKey
 		return nil, &model.ServiceError{Code: "MISSING_IDEMPOTENCY_KEY", Message: "Idempotency-Key is required", HTTPStatus: http.StatusBadRequest}
 	}
 
-	response, svcErr := s.resolveExistingOperation(
-		idempotencyKey,
-		operationRelease,
-		request.OrderID,
-		request.ProductID,
-		request.Quantity,
-		correlationID,
-		serviceStatusRel,
-	)
-	if response != nil || svcErr != nil {
-		return response, svcErr
-	}
-
 	op := buildOperation(idempotencyKey, operationRelease, request.OrderID, request.ProductID, request.Quantity, correlationID)
-	claimed, err := s.repo.ClaimOperation(op)
+	existing, created, err := s.repo.ClaimOrGetByIdempotency(op)
 	if err != nil {
+		if repository.IsUniqueViolation(err) {
+			if byKey, lookupErr := s.repo.FindByIdempotencyKey(idempotencyKey); lookupErr != nil {
+				return nil, dbServiceError(lookupErr)
+			} else if byKey != nil {
+				return s.handleExistingOperation(byKey, operationRelease, request.OrderID, request.ProductID, request.Quantity, correlationID, serviceStatusRel)
+			}
+			return s.resolveOrderOperationConflict(request.OrderID, operationRelease, idempotencyKey)
+		}
 		return nil, dbServiceError(err)
 	}
-	if !claimed {
-		return s.resolveClaimConflict(
-			idempotencyKey,
-			operationRelease,
-			request.OrderID,
-			request.ProductID,
-			request.Quantity,
-			correlationID,
-			serviceStatusRel,
-		)
+	if !created {
+		return s.handleExistingOperation(existing, operationRelease, request.OrderID, request.ProductID, request.Quantity, correlationID, serviceStatusRel)
 	}
 
 	reserveOp, err := s.repo.FindByOrderAndType(request.OrderID, operationReserve)
@@ -240,42 +232,7 @@ func (s *InventoryService) CheckAvailable(productID string, correlationID string
 	}, nil
 }
 
-func (s *InventoryService) resolveExistingOperation(
-	idempotencyKey string,
-	operationType string,
-	orderID string,
-	productID string,
-	quantity int,
-	correlationID string,
-	serviceStatus string,
-) (map[string]any, *model.ServiceError) {
-	existing, err := s.repo.FindByIdempotencyKey(idempotencyKey)
-	if err != nil {
-		return nil, dbServiceError(err)
-	}
-	if existing == nil {
-		return nil, nil
-	}
-	return s.handleExistingOperation(existing, operationType, orderID, productID, quantity, correlationID, serviceStatus)
-}
-
-func (s *InventoryService) resolveClaimConflict(
-	idempotencyKey string,
-	operationType string,
-	orderID string,
-	productID string,
-	quantity int,
-	correlationID string,
-	serviceStatus string,
-) (map[string]any, *model.ServiceError) {
-	byKey, err := s.repo.FindByIdempotencyKey(idempotencyKey)
-	if err != nil {
-		return nil, dbServiceError(err)
-	}
-	if byKey != nil {
-		return s.handleExistingOperation(byKey, operationType, orderID, productID, quantity, correlationID, serviceStatus)
-	}
-
+func (s *InventoryService) resolveOrderOperationConflict(orderID string, operationType string, idempotencyKey string) (map[string]any, *model.ServiceError) {
 	byOrder, err := s.repo.FindByOrderAndType(orderID, operationType)
 	if err != nil {
 		return nil, dbServiceError(err)
@@ -289,7 +246,11 @@ func (s *InventoryService) resolveClaimConflict(
 	}
 
 	if byOrder.IdempotencyKey == idempotencyKey {
-		return s.handleExistingOperation(byOrder, operationType, orderID, productID, quantity, correlationID, serviceStatus)
+		return nil, &model.ServiceError{
+			Code:       "IDEMPOTENCY_IN_PROGRESS",
+			Message:    "Operation is still in progress for this idempotency key",
+			HTTPStatus: httpConflictStatus,
+		}
 	}
 
 	return nil, &model.ServiceError{
@@ -314,6 +275,14 @@ func (s *InventoryService) handleExistingOperation(
 			Message:    "Idempotency key already used with different payload",
 			HTTPStatus: httpConflictStatus,
 		}
+	}
+
+	if strings.EqualFold(strings.TrimSpace(existing.Status), statusInProgress) {
+		finalized, svcErr := s.awaitOperationCompletion(existing.IdempotencyKey)
+		if svcErr != nil {
+			return nil, svcErr
+		}
+		existing = finalized
 	}
 
 	switch strings.ToUpper(strings.TrimSpace(existing.Status)) {
@@ -344,6 +313,51 @@ func (s *InventoryService) handleExistingOperation(
 			Code:       code,
 			Message:    message,
 			HTTPStatus: httpConflictStatus,
+		}
+	}
+}
+
+func (s *InventoryService) awaitOperationCompletion(idempotencyKey string) (*model.InventoryOperation, *model.ServiceError) {
+	timeout := s.idempotencyWaitTimeout
+	if timeout <= 0 {
+		timeout = defaultIdempotencyWaitTimeout
+	}
+	pollWindow := s.idempotencyPollWindow
+	if pollWindow <= 0 {
+		pollWindow = defaultIdempotencyPollWindow
+	}
+
+	deadline := time.Now().Add(timeout)
+	for {
+		current, err := s.repo.FindByIdempotencyKey(idempotencyKey)
+		if err != nil {
+			return nil, dbServiceError(err)
+		}
+		if current == nil {
+			return nil, &model.ServiceError{
+				Code:       "IDEMPOTENCY_CONFLICT",
+				Message:    "Idempotency operation disappeared while processing",
+				HTTPStatus: httpConflictStatus,
+			}
+		}
+
+		if !strings.EqualFold(strings.TrimSpace(current.Status), statusInProgress) {
+			return current, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, &model.ServiceError{
+				Code:       "IDEMPOTENCY_IN_PROGRESS",
+				Message:    "Operation is still in progress for this idempotency key",
+				HTTPStatus: httpConflictStatus,
+			}
+		}
+
+		waitFor := pollWindow
+		if remaining := time.Until(deadline); remaining < waitFor {
+			waitFor = remaining
+		}
+		if waitFor > 0 {
+			time.Sleep(waitFor)
 		}
 	}
 }
@@ -393,16 +407,13 @@ func (s *InventoryService) getProduct(productID string, correlationID string) (*
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, &model.ServiceError{Code: "PRODUCT_SERVICE_UNAVAILABLE", Message: err.Error(), HTTPStatus: http.StatusBadGateway}
+		return nil, mapDownstreamError(err, "")
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, &model.ServiceError{Code: "INVALID_PRODUCT", Message: "Product not found", HTTPStatus: http.StatusNotFound}
-	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, &model.ServiceError{Code: "PRODUCT_SERVICE_ERROR", Message: string(body), HTTPStatus: http.StatusBadGateway}
+		return nil, mapDownstreamStatus(resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var product ProductView
@@ -424,28 +435,18 @@ func (s *InventoryService) adjustStock(action string, productID string, quantity
 
 	req, _ := http.NewRequest(http.MethodPost, parsed.String(), nil)
 	req.Header.Set("X-Internal-Caller", "inventory-service")
+	req.Header.Set("X-Internal-Token", s.internalServiceToken)
 	req.Header.Set("X-Correlation-Id", correlationID)
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return &model.ServiceError{Code: "PRODUCT_SERVICE_UNAVAILABLE", Message: err.Error(), HTTPStatus: http.StatusBadGateway}
+		return mapDownstreamError(err, "failed to adjust stock")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		errBody := strings.TrimSpace(string(body))
-		if errBody == "" {
-			errBody = "failed to adjust stock"
-		}
-		code := "PRODUCT_STOCK_UPDATE_FAILED"
-		if resp.StatusCode == http.StatusNotFound {
-			code = "INVALID_PRODUCT"
-		}
-		if resp.StatusCode == http.StatusBadRequest {
-			code = "OUT_OF_STOCK"
-		}
-		return &model.ServiceError{Code: code, Message: errBody, HTTPStatus: httpConflictStatus}
+		return mapDownstreamStatus(resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	return nil
@@ -491,7 +492,122 @@ func dbServiceError(err error) *model.ServiceError {
 }
 
 func newOperationID() string {
-	return strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
+	return uuid.NewString()
+}
+
+func mapDownstreamError(err error, fallbackMessage string) *model.ServiceError {
+	message := strings.TrimSpace(err.Error())
+	if message == "" {
+		message = strings.TrimSpace(fallbackMessage)
+	}
+	if message == "" {
+		message = "downstream call failed"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return &model.ServiceError{
+			Code:       "PRODUCT_SERVICE_TIMEOUT",
+			Message:    message,
+			HTTPStatus: http.StatusGatewayTimeout,
+		}
+	}
+	if strings.Contains(strings.ToLower(message), "timeout") {
+		return &model.ServiceError{
+			Code:       "PRODUCT_SERVICE_TIMEOUT",
+			Message:    message,
+			HTTPStatus: http.StatusGatewayTimeout,
+		}
+	}
+	return &model.ServiceError{
+		Code:       "PRODUCT_SERVICE_UNAVAILABLE",
+		Message:    message,
+		HTTPStatus: http.StatusBadGateway,
+	}
+}
+
+func mapDownstreamStatus(statusCode int, body string) *model.ServiceError {
+	downstreamCode, downstreamMessage := parseDownstreamError(body)
+	message := strings.TrimSpace(downstreamMessage)
+	if message == "" {
+		message = "downstream service error"
+	}
+
+	switch {
+	case statusCode == http.StatusNotFound:
+		return &model.ServiceError{
+			Code:       "INVALID_PRODUCT",
+			Message:    message,
+			HTTPStatus: http.StatusNotFound,
+		}
+	case statusCode == http.StatusConflict:
+		return &model.ServiceError{
+			Code:       "OUT_OF_STOCK",
+			Message:    message,
+			HTTPStatus: http.StatusConflict,
+		}
+	case statusCode == http.StatusBadRequest && strings.EqualFold(downstreamCode, "INSUFFICIENT_STOCK"):
+		return &model.ServiceError{
+			Code:       "OUT_OF_STOCK",
+			Message:    message,
+			HTTPStatus: http.StatusConflict,
+		}
+	case statusCode == http.StatusForbidden && strings.EqualFold(downstreamCode, "FORBIDDEN_INTERNAL_ENDPOINT"):
+		return &model.ServiceError{
+			Code:       "PRODUCT_INTERNAL_AUTH_FAILED",
+			Message:    message,
+			HTTPStatus: http.StatusBadGateway,
+		}
+	case statusCode >= http.StatusInternalServerError:
+		return &model.ServiceError{
+			Code:       "PRODUCT_SERVICE_UNAVAILABLE",
+			Message:    message,
+			HTTPStatus: http.StatusServiceUnavailable,
+		}
+	case statusCode >= http.StatusBadRequest:
+		return &model.ServiceError{
+			Code:       "PRODUCT_SERVICE_BAD_REQUEST",
+			Message:    message,
+			HTTPStatus: http.StatusBadRequest,
+		}
+	default:
+		return &model.ServiceError{
+			Code:       "PRODUCT_STOCK_UPDATE_FAILED",
+			Message:    message,
+			HTTPStatus: http.StatusBadGateway,
+		}
+	}
+}
+
+func parseDownstreamError(body string) (string, string) {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
+		return "", ""
+	}
+
+	var parsed struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+		Error   struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return "", trimmed
+	}
+
+	code := strings.TrimSpace(parsed.Code)
+	message := strings.TrimSpace(parsed.Message)
+	if code == "" {
+		code = strings.TrimSpace(parsed.Error.Code)
+	}
+	if message == "" {
+		message = strings.TrimSpace(parsed.Error.Message)
+	}
+	if message == "" {
+		message = trimmed
+	}
+	return code, message
 }
 
 func validateReserveRequest(request *model.ReserveRequest) *model.ServiceError {

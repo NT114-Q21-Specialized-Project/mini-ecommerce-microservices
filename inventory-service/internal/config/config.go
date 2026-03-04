@@ -14,6 +14,7 @@ type Config struct {
 	DB                    *sql.DB
 	Port                  string
 	ProductServiceBaseURL string
+	InternalServiceToken  string
 	ChaosMode             bool
 	LatencyProbability    float64
 	ErrorProbability      float64
@@ -95,10 +96,14 @@ func Load() (*Config, error) {
 		DB:                    db,
 		Port:                  getEnv("SERVER_PORT", "8080"),
 		ProductServiceBaseURL: strings.TrimRight(getEnv("PRODUCT_SERVICE_BASE_URL", "http://product-service:8080"), "/"),
+		InternalServiceToken:  strings.TrimSpace(getEnv("INTERNAL_SERVICE_TOKEN", "")),
 		ChaosMode:             getEnvBool("CHAOS_MODE", false),
 		LatencyProbability:    getEnvFloat("LATENCY_PROBABILITY", 0),
 		ErrorProbability:      getEnvFloat("ERROR_PROBABILITY", 0),
 		ChaosDelayMs:          getEnvInt("CHAOS_DELAY_MS", 0),
+	}
+	if cfg.InternalServiceToken == "" {
+		return nil, fmt.Errorf("INTERNAL_SERVICE_TOKEN is required")
 	}
 
 	return cfg, nil

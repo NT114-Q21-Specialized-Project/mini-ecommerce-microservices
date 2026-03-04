@@ -2,9 +2,12 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 
 	"inventory-service/internal/model"
+
+	"github.com/lib/pq"
 )
 
 type InventoryRepository struct {
@@ -67,7 +70,7 @@ WHERE order_id = $1
 	return scanOperation(row)
 }
 
-func (r *InventoryRepository) ClaimOperation(operation *model.InventoryOperation) (bool, error) {
+func (r *InventoryRepository) ClaimOrGetByIdempotency(operation *model.InventoryOperation) (*model.InventoryOperation, bool, error) {
 	query := `
 INSERT INTO inventory_operations (
     id,
@@ -82,9 +85,12 @@ INSERT INTO inventory_operations (
     correlation_id,
     created_at
 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-ON CONFLICT DO NOTHING
+ON CONFLICT (idempotency_key) DO UPDATE
+SET idempotency_key = EXCLUDED.idempotency_key
+RETURNING id, idempotency_key, operation_type, order_id, product_id, quantity,
+          status, error_code, error_message, correlation_id, created_at
 `
-	result, err := r.db.Exec(
+	row := r.db.QueryRow(
 		query,
 		operation.ID,
 		operation.IdempotencyKey,
@@ -98,16 +104,14 @@ ON CONFLICT DO NOTHING
 		nullIfEmpty(operation.CorrelationID),
 		operation.CreatedAt,
 	)
-	if err != nil {
-		return false, err
+	existing, scanErr := scanOperation(row)
+	if scanErr != nil {
+		return nil, false, scanErr
 	}
-
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return false, err
+	if existing == nil {
+		return nil, false, nil
 	}
-
-	return affected == 1, nil
+	return existing, existing.ID == operation.ID, nil
 }
 
 func (r *InventoryRepository) UpdateOperationResult(
@@ -186,4 +190,9 @@ func nullIfEmpty(value string) any {
 		return nil
 	}
 	return value
+}
+
+func IsUniqueViolation(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "23505"
 }

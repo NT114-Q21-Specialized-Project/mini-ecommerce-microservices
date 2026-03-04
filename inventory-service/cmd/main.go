@@ -83,6 +83,9 @@ func main() {
 
 	inventoryService := service.NewInventoryService(repo, cfg)
 	inventoryHandler := handler.NewInventoryHandler(inventoryService)
+	internalOnly := middleware.InternalServiceAuth(cfg.InternalServiceToken)
+	reserveHandler := internalOnly(http.HandlerFunc(inventoryHandler.Reserve))
+	releaseHandler := internalOnly(http.HandlerFunc(inventoryHandler.Release))
 
 	appCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -99,8 +102,8 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/health", inventoryHandler.Health).Methods(http.MethodGet)
 	router.HandleFunc("/inventory/health", inventoryHandler.Health).Methods(http.MethodGet)
-	router.HandleFunc("/inventory/reserve", inventoryHandler.Reserve).Methods(http.MethodPost)
-	router.HandleFunc("/inventory/release", inventoryHandler.Release).Methods(http.MethodPost)
+	router.Handle("/inventory/reserve", reserveHandler).Methods(http.MethodPost)
+	router.Handle("/inventory/release", releaseHandler).Methods(http.MethodPost)
 	router.HandleFunc("/simulate-cpu", inventoryHandler.SimulateCPU).Methods(http.MethodGet)
 	router.HandleFunc("/simulate-memory", inventoryHandler.SimulateMemory).Methods(http.MethodGet)
 	router.HandleFunc("/inventory/simulate-cpu", inventoryHandler.SimulateCPU).Methods(http.MethodGet)
