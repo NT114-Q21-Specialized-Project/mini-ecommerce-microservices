@@ -153,6 +153,16 @@ pipeline {
             }
         }
 
+        stage('Pipeline Context') {
+            steps {
+                sh '''
+                  echo "Branch   : ${BRANCH_NAME:-unknown}"
+                  echo "Commit   : ${GIT_COMMIT:-unknown}"
+                  echo "Build URL: ${BUILD_URL:-n/a}"
+                '''
+            }
+        }
+
         /* =========================
            DETECT CHANGED SERVICES
         ========================= */
