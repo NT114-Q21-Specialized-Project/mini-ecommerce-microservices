@@ -10,11 +10,14 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.UUID;
 
 @Validated
@@ -24,9 +27,14 @@ import java.util.UUID;
 public class ProductController {
 
     private final ProductService service;
+    private final String internalServiceToken;
 
-    public ProductController(ProductService service) {
+    public ProductController(
+            ProductService service,
+            @Value("${security.internal.token}") String internalServiceToken
+    ) {
         this.service = service;
+        this.internalServiceToken = internalServiceToken == null ? "" : internalServiceToken.trim();
     }
 
     // =========================
@@ -85,9 +93,10 @@ public class ProductController {
     public ResponseEntity<Void> decreaseStock(
             @PathVariable UUID id,
             @RequestHeader(value = "X-Internal-Caller", required = false) String caller,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
             @RequestParam @Min(value = 1, message = "quantity must be greater than 0") int quantity
     ) {
-        if (!isAllowedInternalCaller(caller)) {
+        if (!isAllowedInternalCaller(caller, internalToken)) {
             throw new ForbiddenException("FORBIDDEN_INTERNAL_ENDPOINT", "Forbidden internal endpoint");
         }
 
@@ -99,9 +108,10 @@ public class ProductController {
     public ResponseEntity<Void> increaseStock(
             @PathVariable UUID id,
             @RequestHeader(value = "X-Internal-Caller", required = false) String caller,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
             @RequestParam @Min(value = 1, message = "quantity must be greater than 0") int quantity
     ) {
-        if (!isAllowedInternalCaller(caller)) {
+        if (!isAllowedInternalCaller(caller, internalToken)) {
             throw new ForbiddenException("FORBIDDEN_INTERNAL_ENDPOINT", "Forbidden internal endpoint");
         }
 
@@ -109,10 +119,22 @@ public class ProductController {
         return ResponseEntity.ok().build();
     }
 
-    private boolean isAllowedInternalCaller(String caller) {
+    private boolean isAllowedInternalCaller(String caller, String internalToken) {
         if (caller == null || caller.isBlank()) {
             return false;
         }
-        return "order-service".equalsIgnoreCase(caller) || "inventory-service".equalsIgnoreCase(caller);
+        if (internalToken == null || internalToken.isBlank()) {
+            return false;
+        }
+
+        boolean allowedCaller = "order-service".equalsIgnoreCase(caller) || "inventory-service".equalsIgnoreCase(caller);
+        if (!allowedCaller) {
+            return false;
+        }
+
+        return MessageDigest.isEqual(
+                internalToken.trim().getBytes(StandardCharsets.UTF_8),
+                internalServiceToken.getBytes(StandardCharsets.UTF_8)
+        );
     }
 }

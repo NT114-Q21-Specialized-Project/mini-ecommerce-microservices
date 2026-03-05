@@ -45,3 +45,7 @@ logging:
   level:
     org.springframework.web: INFO
     org.hibernate.SQL: DEBUG
+
+security:
+  internal:
+    token: ${INTERNAL_SERVICE_TOKEN:}
