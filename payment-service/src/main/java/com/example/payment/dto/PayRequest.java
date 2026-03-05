@@ -1,9 +1,11 @@
 package com.example.payment.dto;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public class PayRequest {
@@ -16,7 +18,8 @@ public class PayRequest {
 
     @NotNull(message = "amount is required")
     @DecimalMin(value = "0.01", message = "amount must be greater than 0")
-    private Double amount;
+    @Digits(integer = 17, fraction = 2, message = "amount must have at most 2 decimal places")
+    private BigDecimal amount;
 
     @NotBlank(message = "currency is required")
     private String currency;
@@ -39,11 +42,11 @@ public class PayRequest {
         this.userId = userId;
     }
 
-    public Double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(Double amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 

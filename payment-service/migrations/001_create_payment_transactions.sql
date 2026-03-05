@@ -2,10 +2,11 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
     id UUID PRIMARY KEY,
     order_id UUID NOT NULL,
     user_id UUID,
-    amount DOUBLE PRECISION NOT NULL,
+    amount NUMERIC(19, 2) NOT NULL,
     currency VARCHAR(16) NOT NULL,
-    operation_type VARCHAR(16) NOT NULL,
-    status VARCHAR(32) NOT NULL,
+    operation_type VARCHAR(16) NOT NULL CHECK (operation_type IN ('PAY', 'REFUND')),
+    status VARCHAR(32) NOT NULL CHECK (status IN ('PAID', 'REFUNDED', 'FAILED')),
+    reference_payment_id UUID REFERENCES payment_transactions(id),
     provider_ref VARCHAR(120),
     idempotency_key VARCHAR(128) NOT NULL UNIQUE,
     correlation_id VARCHAR(120),
@@ -16,3 +17,6 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_payment_order_created
 ON payment_transactions (order_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_payment_refund_lookup
+ON payment_transactions (reference_payment_id, status);

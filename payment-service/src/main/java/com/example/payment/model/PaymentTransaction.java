@@ -2,6 +2,7 @@ package com.example.payment.model;
 
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -10,7 +11,8 @@ import java.util.UUID;
         name = "payment_transactions",
         indexes = {
                 @Index(name = "idx_payment_order_created", columnList = "order_id, created_at"),
-                @Index(name = "idx_payment_idempotency", columnList = "idempotency_key", unique = true)
+                @Index(name = "idx_payment_idempotency", columnList = "idempotency_key", unique = true),
+                @Index(name = "idx_payment_refund_lookup", columnList = "reference_payment_id, status")
         }
 )
 public class PaymentTransaction {
@@ -25,17 +27,22 @@ public class PaymentTransaction {
     @Column(name = "user_id")
     private UUID userId;
 
-    @Column(nullable = false)
-    private Double amount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
 
     @Column(nullable = false, length = 16)
     private String currency;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "operation_type", nullable = false, length = 16)
-    private String operationType;
+    private PaymentOperationType operationType;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
-    private String status;
+    private PaymentStatus status;
+
+    @Column(name = "reference_payment_id")
+    private UUID referencePaymentId;
 
     @Column(name = "provider_ref", length = 120)
     private String providerRef;
@@ -91,11 +98,11 @@ public class PaymentTransaction {
         this.userId = userId;
     }
 
-    public Double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(Double amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
@@ -107,20 +114,28 @@ public class PaymentTransaction {
         this.currency = currency;
     }
 
-    public String getOperationType() {
+    public PaymentOperationType getOperationType() {
         return operationType;
     }
 
-    public void setOperationType(String operationType) {
+    public void setOperationType(PaymentOperationType operationType) {
         this.operationType = operationType;
     }
 
-    public String getStatus() {
+    public PaymentStatus getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(PaymentStatus status) {
         this.status = status;
+    }
+
+    public UUID getReferencePaymentId() {
+        return referencePaymentId;
+    }
+
+    public void setReferencePaymentId(UUID referencePaymentId) {
+        this.referencePaymentId = referencePaymentId;
     }
 
     public String getProviderRef() {
