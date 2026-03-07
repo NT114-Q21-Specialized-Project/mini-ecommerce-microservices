@@ -47,6 +47,7 @@ inventory-service/internal/service/inventory_service.go
 inventory-service/internal/repository/inventory_repository.go
 inventory-service/internal/model/models.go
 inventory-service/migrations/001_create_inventory_operations.sql
+api-contracts/inventory-service.openapi.yaml
 EOF
     ;;
   payment)
@@ -57,6 +58,7 @@ payment-service/src/main/java/com/example/payment/controller/GlobalExceptionHand
 payment-service/src/main/java/com/example/payment/model/PaymentTransaction.java
 payment-service/src/main/java/com/example/payment/repository/PaymentTransactionRepository.java
 payment-service/migrations/001_create_payment_transactions.sql
+api-contracts/payment-service.openapi.yaml
 EOF
     ;;
   order)
@@ -77,6 +79,7 @@ EOF
     cat <<'EOF'
 api-gateway/src/main/java/com/example/gateway/security/JwtAuthenticationFilter.java
 api-gateway/src/main/resources/application.yml
+api-contracts/api-gateway.openapi.yaml
 EOF
     ;;
   frontend)

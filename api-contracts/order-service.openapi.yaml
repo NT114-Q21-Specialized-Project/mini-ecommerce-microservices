@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   title: Order Service API
-  version: 1.0.0
+  version: 1.1.0
 servers:
   - url: http://localhost:9000
 paths:
   /api/v1/orders:
     post:
-      summary: Create order
+      summary: Create order (Saga orchestrated)
       tags: [Orders]
       security:
         - bearerAuth: []
@@ -30,17 +30,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateOrderResponse'
+                $ref: '#/components/schemas/OrderWorkflowResponse'
         '200':
           description: Idempotent replay
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateOrderResponse'
+                $ref: '#/components/schemas/OrderWorkflowResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     get:
-      summary: List orders (current user, or all for admin)
+      summary: List orders (current user, or all for admin with userId query)
       tags: [Orders]
       security:
         - bearerAuth: []
@@ -60,6 +76,48 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Order'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/orders/{id}/saga:
+    get:
+      summary: Get saga step history of an order
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Saga steps
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderSagaStep'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/orders/{id}/cancel:
     patch:
       summary: Cancel order
@@ -82,6 +140,23 @@ paths:
                 $ref: '#/components/schemas/Order'
         '400':
           description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/orders/outbox/pending:
     get:
       summary: Get pending outbox events (admin)
@@ -105,7 +180,14 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/OutboxEvent'
+                  $ref: '#/components/schemas/PendingOutboxEvent'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -123,13 +205,21 @@ components:
         quantity:
           type: integer
           minimum: 1
-    CreateOrderResponse:
+
+    OrderWorkflowResponse:
       type: object
       properties:
         idempotentReplay:
           type: boolean
+        correlationId:
+          type: string
         order:
           $ref: '#/components/schemas/Order'
+        sagaSteps:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderSagaStep'
+
     Order:
       type: object
       properties:
@@ -163,7 +253,39 @@ components:
         idempotencyKey:
           type: string
           nullable: true
-    OutboxEvent:
+        failureReason:
+          type: string
+          nullable: true
+
+    OrderSagaStep:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        stepName:
+          type: string
+        stepStatus:
+          type: string
+        retryCount:
+          type: integer
+          minimum: 0
+        compensation:
+          type: boolean
+        detail:
+          type: string
+          nullable: true
+        correlationId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    PendingOutboxEvent:
       type: object
       properties:
         id:
@@ -176,10 +298,9 @@ components:
           format: uuid
         eventType:
           type: string
-        payload:
-          type: string
         status:
           type: string
+          enum: [PENDING, PUBLISHED, FAILED]
         createdAt:
           type: string
           format: date-time
@@ -187,3 +308,14 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
