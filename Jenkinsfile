@@ -177,7 +177,21 @@ pipeline {
                     sh 'git fetch --no-tags --depth=100 origin +refs/heads/main:refs/remotes/origin/main || true'
 
                     def changedFilesRaw = sh(
-                        script: 'git diff --name-only origin/main...HEAD || true',
+                        script: '''
+                          set +e
+
+                          CHANGED_FILES="$(git diff --name-only origin/main...HEAD || true)"
+
+                          # On main branch, HEAD is usually equal to origin/main after push,
+                          # so triple-dot diff can be empty even when this commit changed files.
+                          # Fallback to previous build commit range for incremental CI on main.
+                          if [ -z "$CHANGED_FILES" ] && [ "${BRANCH_NAME:-}" = "main" ]; then
+                            PREV_COMMIT="${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-${GIT_PREVIOUS_COMMIT:-HEAD~1}}"
+                            CHANGED_FILES="$(git diff --name-only "$PREV_COMMIT" HEAD || true)"
+                          fi
+
+                          printf "%s" "$CHANGED_FILES"
+                        ''',
                         returnStdout: true
                     ).trim()
 
