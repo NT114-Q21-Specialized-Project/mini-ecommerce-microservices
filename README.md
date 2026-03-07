@@ -334,6 +334,7 @@ Useful URLs:
 ## 11. Notes
 
 - API contracts are under `api-contracts/`.
-- Current OpenAPI contracts are maintained for `user-service`, `product-service`, and `order-service`.
+- Current OpenAPI contracts are maintained for `api-gateway`, `user-service`, `product-service`, `inventory-service`, `payment-service`, and `order-service`.
+- Keep load-testing scripts in a separate repository and consume these OpenAPI contracts as the source of truth.
 - Front-end communicates only through `api-gateway`.
 - For local browser use, CORS is configured in gateway for `http://localhost:5173`.

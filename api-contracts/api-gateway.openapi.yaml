@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: API Gateway System Endpoints
+  version: 1.0.0
+servers:
+  - url: http://localhost:9000
+paths:
+  /actuator/health:
+    get:
+      summary: Gateway health endpoint
+      tags: [Gateway]
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /actuator/info:
+    get:
+      summary: Gateway info endpoint
+      tags: [Gateway]
+      responses:
+        '200':
+          description: Info payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+components:
+  schemas:
+    GatewayErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        path:
+          type: string
+        correlationId:
+          type: string

@@ -1,0 +1,378 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  version: 1.0.0
+servers:
+  - url: http://localhost:9000
+paths:
+  /api/v1/payments/health:
+    get:
+      summary: Health check
+      tags: [System]
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/payments/pay:
+    post:
+      summary: Process payment
+      tags: [Payments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayRequest'
+      responses:
+        '200':
+          description: Payment processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict (idempotency key reuse with different payload)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Payment declined by provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/payments/refund:
+    post:
+      summary: Refund payment
+      tags: [Payments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+      responses:
+        '200':
+          description: Refund processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Reference paid transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Invalid payment state / refund conflict / idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Refund declined by provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/payments/order/{orderId}:
+    get:
+      summary: Get payment timeline by order id
+      tags: [Payments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentTransaction'
+
+  /api/v1/payments/simulate-cpu:
+    get:
+      summary: Simulate CPU load
+      tags: [Chaos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: seconds
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 2
+            minimum: 1
+            maximum: 20
+      responses:
+        '200':
+          description: CPU simulation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CpuSimulationResponse'
+
+  /api/v1/payments/simulate-memory:
+    get:
+      summary: Simulate memory load
+      tags: [Chaos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: mb
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 64
+            minimum: 32
+            maximum: 512
+      responses:
+        '200':
+          description: Memory simulation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemorySimulationResponse'
+
+  /api/v1/payments/simulate-load:
+    get:
+      summary: Simulate generic load
+      tags: [Chaos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [cpu, memory]
+            default: cpu
+        - name: amount
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 2
+      responses:
+        '200':
+          description: Load simulation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericSimulationResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    PayRequest:
+      type: object
+      required: [orderId, userId, amount, currency]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+        currency:
+          type: string
+          example: USD
+        idempotencyKey:
+          type: string
+
+    RefundRequest:
+      type: object
+      required: [orderId, amount, currency]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+        currency:
+          type: string
+          example: USD
+        paymentId:
+          type: string
+          format: uuid
+          nullable: true
+        idempotencyKey:
+          type: string
+
+    PaymentResponse:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PAID, REFUNDED, FAILED]
+        providerRef:
+          type: string
+        idempotentReplay:
+          type: boolean
+        processedAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+
+    PaymentTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        amount:
+          type: number
+          format: double
+        currency:
+          type: string
+        operationType:
+          type: string
+          enum: [PAY, REFUND]
+        status:
+          type: string
+          enum: [PAID, REFUNDED, FAILED]
+        referencePaymentId:
+          type: string
+          format: uuid
+          nullable: true
+        providerRef:
+          type: string
+        idempotencyKey:
+          type: string
+        correlationId:
+          type: string
+        failureReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+
+    CpuSimulationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        mode:
+          type: string
+          enum: [cpu]
+        seconds:
+          type: integer
+
+    MemorySimulationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        mode:
+          type: string
+          enum: [memory]
+        mb:
+          type: integer
+
+    GenericSimulationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        mode:
+          type: string
+        seconds:
+          type: integer
+        mb:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        correlationId:
+          type: string

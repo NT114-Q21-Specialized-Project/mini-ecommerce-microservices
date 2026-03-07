@@ -1,0 +1,294 @@
+openapi: 3.0.3
+info:
+  title: Inventory Service API
+  version: 1.0.0
+servers:
+  - url: http://localhost:9000
+paths:
+  /api/v1/inventory/health:
+    get:
+      summary: Health check
+      tags: [System]
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/inventory/{productId}:
+    get:
+      summary: Check inventory by product id
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Inventory view
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryView'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/inventory/reserve:
+    post:
+      summary: Reserve inventory
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveRequest'
+      responses:
+        '200':
+          description: Reservation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryOperation'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict (for example out-of-stock / idempotency conflict)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/inventory/release:
+    post:
+      summary: Release reserved inventory
+      tags: [Inventory]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseRequest'
+      responses:
+        '200':
+          description: Release result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryOperation'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/inventory/simulate-cpu:
+    get:
+      summary: Simulate CPU load
+      tags: [Chaos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: seconds
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 2
+            minimum: 1
+            maximum: 20
+      responses:
+        '200':
+          description: CPU load simulated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CpuSimulationResponse'
+
+  /api/v1/inventory/simulate-memory:
+    get:
+      summary: Simulate memory load
+      tags: [Chaos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: mb
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 64
+            minimum: 1
+            maximum: 512
+      responses:
+        '200':
+          description: Memory load simulated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemorySimulationResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ReserveRequest:
+      type: object
+      required: [orderId, productId, quantity]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        idempotencyKey:
+          type: string
+
+    ReleaseRequest:
+      type: object
+      required: [orderId, productId, quantity]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        idempotencyKey:
+          type: string
+
+    InventoryOperation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        idempotencyKey:
+          type: string
+        operationType:
+          type: string
+        orderId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+        status:
+          type: string
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
+        correlationId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    InventoryView:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        availableStock:
+          type: integer
+        source:
+          type: string
+
+    CpuSimulationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        seconds:
+          type: integer
+
+    MemorySimulationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        mb:
+          type: integer
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        correlationId:
+          type: string
