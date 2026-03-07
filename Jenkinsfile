@@ -47,7 +47,7 @@ def runServiceTest(Map service) {
                 -v "\$PWD/${service.dir}:/app" \\
                 -w /app \\
                 maven:3.9.6-eclipse-temurin-17 \\
-                mvn -B test
+                mvn -B clean test
             """
             break
 
