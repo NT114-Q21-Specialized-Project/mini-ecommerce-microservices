@@ -11,7 +11,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "security.jwt.enabled=true",
-                "security.jwt.secret=test-secret-key-for-gateway-jwt-signing-2026-very-long"
+                "security.jwt.secret=test-secret-key-for-gateway-jwt-signing-2026-very-long",
+                "INTERNAL_SERVICE_TOKEN=test-internal-service-token"
         }
 )
 class RouteAuthorizationEvaluatorTest {

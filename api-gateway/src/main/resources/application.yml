@@ -46,28 +46,28 @@ spring:
         - id: user-service
           uri: ${USER_SERVICE_URL:http://user-service:8080}
           predicates:
-            - Path=/api/v1/users/**, /api/v1/users
+            - Path=/api/v1/users/**,/api/v1/users
           filters:
             - StripPrefix=2
 
         - id: product-service
           uri: ${PRODUCT_SERVICE_URL:http://product-service:8080}
           predicates:
-            - Path=/api/v1/products/**, /api/v1/products
+            - Path=/api/v1/products/**,/api/v1/products
           filters:
             - StripPrefix=2
 
         - id: order-service
           uri: ${ORDER_SERVICE_URL:http://order-service:8080}
           predicates:
-            - Path=/api/v1/orders/**, /api/v1/orders
+            - Path=/api/v1/orders/**,/api/v1/orders
           filters:
             - StripPrefix=2
 
         - id: inventory-service
           uri: ${INVENTORY_SERVICE_URL:http://inventory-service:8080}
           predicates:
-            - Path=/api/v1/inventory/**, /api/v1/inventory
+            - Path=/api/v1/inventory/**,/api/v1/inventory
           filters:
             - StripPrefix=2
             - AddRequestHeader=X-Internal-Caller, api-gateway
@@ -76,7 +76,7 @@ spring:
         - id: payment-service
           uri: ${PAYMENT_SERVICE_URL:http://payment-service:8080}
           predicates:
-            - Path=/api/v1/payments/**, /api/v1/payments
+            - Path=/api/v1/payments/**,/api/v1/payments
           filters:
             - StripPrefix=2
             - AddRequestHeader=X-Internal-Caller, api-gateway
