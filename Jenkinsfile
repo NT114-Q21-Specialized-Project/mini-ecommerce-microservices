@@ -187,7 +187,14 @@ pipeline {
                           # Fallback to previous build commit range for incremental CI on main.
                           if [ -z "$CHANGED_FILES" ] && [ "${BRANCH_NAME:-}" = "main" ]; then
                             PREV_COMMIT="${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-${GIT_PREVIOUS_COMMIT:-HEAD~1}}"
-                            CHANGED_FILES="$(git diff --name-only "$PREV_COMMIT" HEAD || true)"
+                            if git rev-parse --verify "$PREV_COMMIT" >/dev/null 2>&1; then
+                              CHANGED_FILES="$(git diff --name-only "$PREV_COMMIT" HEAD || true)"
+                            fi
+                          fi
+
+                          # Fallback for shallow checkouts where previous commit is unavailable.
+                          if [ -z "$CHANGED_FILES" ]; then
+                            CHANGED_FILES="$(git show --pretty='' --name-only HEAD || true)"
                           fi
 
                           printf "%s" "$CHANGED_FILES"
