@@ -139,11 +139,9 @@ pipeline {
         GITOPS_REPO = "https://github.com/NT114-Q21-Specialized-Project/kubernetes-hub.git"
         GITOPS_DIR  = "kubernetes-hub"
 
-        TRIVY_IMAGE          = "aquasec/trivy:0.57.1"
         TRIVY_SEVERITY       = "HIGH,CRITICAL"
         TRIVY_SOURCE_SEVERITY = "MEDIUM,HIGH,CRITICAL"
         TRIVY_EXIT_CODE      = "1"
-        TRIVY_IGNORE_UNFIXED = "true"
         TRIVY_CACHE_DIR      = "${HOME}/.trivy-cache-mini-ecommerce"
     }
 
@@ -267,52 +265,6 @@ pipeline {
         }
 
         /* =========================
-           PREPARE TRIVY DB
-        ========================= */
-        stage('Prepare Trivy DB') {
-            when {
-                expression { anyServiceBuildEnabled() }
-            }
-            steps {
-                sh '''
-                  set -e
-
-                  mkdir -p "${TRIVY_CACHE_DIR}"
-
-                  DB_META="${TRIVY_CACHE_DIR}/db/metadata.json"
-                  JAVA_DB_META="${TRIVY_CACHE_DIR}/java-db/metadata.json"
-                  REFRESH_WINDOW_MINUTES=360
-
-                  should_refresh() {
-                    metadata="$1"
-                    if [ ! -f "$metadata" ]; then
-                      return 0
-                    fi
-                    [ -n "$(find "$metadata" -mmin +${REFRESH_WINDOW_MINUTES} -print -quit)" ]
-                  }
-
-                  if should_refresh "$DB_META"; then
-                    echo "Refreshing Trivy vulnerability DB cache..."
-                    docker run --rm \
-                      -v "${TRIVY_CACHE_DIR}:/root/.cache/" \
-                      ${TRIVY_IMAGE} image --download-db-only --no-progress
-                  else
-                    echo "Reusing recent Trivy vulnerability DB cache."
-                  fi
-
-                  if should_refresh "$JAVA_DB_META"; then
-                    echo "Refreshing Trivy Java DB cache..."
-                    docker run --rm \
-                      -v "${TRIVY_CACHE_DIR}:/root/.cache/" \
-                      ${TRIVY_IMAGE} image --download-java-db-only --no-progress
-                  else
-                    echo "Reusing recent Trivy Java DB cache."
-                  fi
-                '''
-            }
-        }
-
-        /* =========================
            PREPARE GITOPS REPO (ONCE)
         ========================= */
         stage('Prepare GitOps Repo') {
@@ -393,18 +345,13 @@ pipeline {
                                 stage("Trivy Source Scan ${service.name}") {
                                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                                         sh """
-                                          docker run --rm \
-                                            -v "\$PWD:/work" \
-                                            -v "${env.TRIVY_CACHE_DIR}:/root/.cache/" \
-                                            -w /work \
-                                            ${env.TRIVY_IMAGE} fs \
-                                            --no-progress \
-                                            --skip-db-update \
-                                            --skip-java-db-update \
-                                            --scanners vuln \
+                                          mkdir -p "${env.TRIVY_CACHE_DIR}"
+                                          trivy fs \
+                                            --cache-dir ${env.TRIVY_CACHE_DIR} \
                                             --severity ${env.TRIVY_SOURCE_SEVERITY} \
+                                            --scanners vuln \
                                             --exit-code ${env.TRIVY_EXIT_CODE} \
-                                            --ignore-unfixed=${env.TRIVY_IGNORE_UNFIXED} \
+                                            --ignore-unfixed \
                                             ./${service.dir}
                                         """
                                     }
@@ -413,17 +360,12 @@ pipeline {
                                 stage("Trivy Scan ${service.name}") {
                                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                                         sh """
-                                          docker run --rm \
-                                            -v /var/run/docker.sock:/var/run/docker.sock \
-                                            -v "${env.TRIVY_CACHE_DIR}:/root/.cache/" \
-                                            ${env.TRIVY_IMAGE} image \
-                                            --no-progress \
-                                            --skip-db-update \
-                                            --skip-java-db-update \
-                                            --scanners vuln \
+                                          mkdir -p "${env.TRIVY_CACHE_DIR}"
+                                          trivy image \
+                                            --cache-dir ${env.TRIVY_CACHE_DIR} \
                                             --severity ${env.TRIVY_SEVERITY} \
                                             --exit-code ${env.TRIVY_EXIT_CODE} \
-                                            --ignore-unfixed=${env.TRIVY_IGNORE_UNFIXED} \
+                                            --ignore-unfixed \
                                             ${imageRef(service)}
                                         """
                                     }
