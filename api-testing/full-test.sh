@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:9000}"
+BASE_URL="${BASE_URL:-http://mini-ecommerce.tienphatng237.com}"
 
 scripts=(
   "gateway-service.sh"
