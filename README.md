@@ -32,13 +32,13 @@ Default local ports:
 
 ```mermaid
 flowchart LR
-    Client[Client\nBrowser/Curl] -->|HTTP /api/*| Gateway[API Gateway :9000]
+    Client[Client\nBrowser/Curl] -->|HTTP /api/v1/*| Gateway[API Gateway :9000]
 
-    Gateway -->|/api/users| UserService[User Service :8080]
-    Gateway -->|/api/products| ProductService[Product Service :8082]
-    Gateway -->|/api/inventory| InventoryService[Inventory Service :8083]
-    Gateway -->|/api/payments| PaymentService[Payment Service :8084]
-    Gateway -->|/api/orders| OrderService[Order Service :8081]
+    Gateway -->|/api/v1/users| UserService[User Service :8080]
+    Gateway -->|/api/v1/products| ProductService[Product Service :8082]
+    Gateway -->|/api/v1/inventory| InventoryService[Inventory Service :8083]
+    Gateway -->|/api/v1/payments| PaymentService[Payment Service :8084]
+    Gateway -->|/api/v1/orders| OrderService[Order Service :8081]
     OrderService -->|Saga Step 1| InventoryService
     OrderService -->|Saga Step 2| PaymentService
     OrderService -->|Compensation| InventoryService
@@ -79,75 +79,90 @@ Order statuses used in service logic:
 
 Saga step history is persisted and can be queried via:
 
-- `GET /api/orders/{id}/saga`
+- `GET /api/v1/orders/{id}/saga`
 
 ## 4. API Surface (via Gateway)
 
-Base URL:
+Base URLs:
 
 ```text
-http://localhost:9000
+Local compose: http://localhost:9000
+k0s ingress:   http://mini-ecommerce.tienphatng237.com
 ```
 
-### 4.1 User Service (`/api/users`)
+### 4.1 Gateway/System
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/api/users/health` | Public | Health check |
-| POST | `/api/users` | Public | Register user (`CUSTOMER/SELLER`) |
-| POST | `/api/users/login` | Public | Login and get JWT |
-| GET | `/api/users` | Bearer JWT (`ADMIN`) | List active users |
-| GET | `/api/users/{id}` | Bearer JWT (Owner or `ADMIN`) | Get user by ID |
-| GET | `/api/users/by-email?email=...` | Bearer JWT (`ADMIN`) | Get user by email |
-| GET | `/api/users/email-exists?email=...` | Bearer JWT (`ADMIN`) | Check email existence |
-| PUT | `/api/users/{id}` | Bearer JWT (Owner or `ADMIN`) | Update user |
-| PATCH | `/api/users/{id}/activate` | Bearer JWT (`ADMIN`) | Activate user |
-| PATCH | `/api/users/{id}/deactivate` | Bearer JWT (`ADMIN`) | Deactivate user |
-| DELETE | `/api/users/{id}` | Bearer JWT (Owner or `ADMIN`) | Soft-delete user |
-| GET | `/api/users/stats` | Bearer JWT (`ADMIN`) | User statistics |
+| GET | `/actuator/health` | Public | Gateway health probe |
+| GET | `/actuator/info` | Public | Gateway info |
 
-### 4.2 Product Service (`/api/products`)
+### 4.2 User Service (`/api/v1/users`)
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/api/products` | Public | List products (supports `page,size,sortBy,sortDir,name,minPrice,maxPrice,minStock,maxStock`) |
-| GET | `/api/products/{id}` | Public | Get product detail |
-| POST | `/api/products` | Bearer JWT (`SELLER/ADMIN`) | Create product |
-| POST | `/api/products/{id}/decrease-stock?quantity=n` | Internal | Decrease stock |
-| POST | `/api/products/{id}/increase-stock?quantity=n` | Internal | Increase stock |
+| GET | `/api/v1/users/health` | Public | Health check |
+| POST | `/api/v1/users` | Public | Register user (`CUSTOMER/SELLER`) |
+| POST | `/api/v1/users/login` | Public | Login and get access/refresh token |
+| POST | `/api/v1/users/refresh` | Public | Refresh access token |
+| POST | `/api/v1/users/logout` | Public | Revoke refresh token |
+| GET | `/api/v1/users` | Bearer JWT (`ADMIN`) | List active users |
+| GET | `/api/v1/users/{id}` | Bearer JWT (Owner or `ADMIN`) | Get user by ID |
+| GET | `/api/v1/users/by-email?email=...` | Bearer JWT (`ADMIN`) | Get user by email |
+| GET | `/api/v1/users/email-exists?email=...` | Bearer JWT (`ADMIN`) | Check email existence |
+| GET | `/api/v1/users/stats` | Bearer JWT (`ADMIN`) | User statistics |
+| PUT | `/api/v1/users/{id}` | Bearer JWT (Owner or `ADMIN`) | Update user |
+| PATCH | `/api/v1/users/{id}/activate` | Bearer JWT (`ADMIN`) | Activate user |
+| PATCH | `/api/v1/users/{id}/deactivate` | Bearer JWT (`ADMIN`) | Deactivate user |
+| DELETE | `/api/v1/users/{id}` | Bearer JWT (Owner or `ADMIN`) | Soft-delete user |
+| GET | `/api/v1/users/{id}/exists` | Bearer JWT (`ADMIN`) | Internal exists check |
+| GET | `/api/v1/users/{id}/role` | Bearer JWT (`ADMIN`) | Internal role lookup |
+| GET | `/api/v1/users/{id}/validate` | Bearer JWT (`ADMIN`) | Internal user validation |
+| GET | `/api/v1/users/internal/users/{id}/validate` | Bearer JWT (`ADMIN`) | Internal alias for validation |
 
-### 4.3 Inventory Service (`/api/inventory`)
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/api/inventory/health` | Public | Health check |
-| GET | `/api/inventory/{productId}` | Bearer JWT | Check available stock |
-| POST | `/api/inventory/reserve` | Bearer JWT (`ADMIN`) | Reserve stock (supports idempotency key) |
-| POST | `/api/inventory/release` | Bearer JWT (`ADMIN`) | Release reserved stock (compensation) |
-| GET | `/api/inventory/simulate-cpu` | Bearer JWT (`ADMIN`) | CPU load simulation |
-| GET | `/api/inventory/simulate-memory` | Bearer JWT (`ADMIN`) | Memory load simulation |
-
-### 4.4 Payment Service (`/api/payments`)
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/api/payments/health` | Public | Health check |
-| POST | `/api/payments/pay` | Bearer JWT (`ADMIN`) | Process payment (supports idempotency key) |
-| POST | `/api/payments/refund` | Bearer JWT (`ADMIN`) | Refund payment (compensation) |
-| GET | `/api/payments/order/{orderId}` | Bearer JWT (`ADMIN`) | Payment timeline by order |
-| GET | `/api/payments/simulate-cpu` | Bearer JWT (`ADMIN`) | CPU load simulation |
-| GET | `/api/payments/simulate-memory` | Bearer JWT (`ADMIN`) | Memory load simulation |
-
-### 4.5 Order Service (`/api/orders`)
+### 4.3 Product Service (`/api/v1/products`)
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| POST | `/api/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | Create order via Saga (requires `Idempotency-Key`) |
-| GET | `/api/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | List current user orders |
-| GET | `/api/orders?userId=<uuid>` | Bearer JWT (`ADMIN`) | Query orders by user |
-| GET | `/api/orders/{id}/saga` | Bearer JWT (`CUSTOMER/ADMIN`) | List saga steps for an order |
-| PATCH | `/api/orders/{id}/cancel` | Bearer JWT (`CUSTOMER/ADMIN`) | Cancel order + compensation |
-| GET | `/api/orders/outbox/pending?limit=20` | Bearer JWT (`ADMIN`) | Pending outbox events |
+| GET | `/api/v1/products` | Public | List products (`page,size,sortBy,sortDir,name,minPrice,maxPrice,minStock,maxStock`) |
+| GET | `/api/v1/products/{id}` | Public | Get product detail |
+| POST | `/api/v1/products` | Bearer JWT (`SELLER/ADMIN`) | Create product |
+| POST | `/api/v1/products/{id}/decrease-stock?quantity=n` | Internal service call | Decrease stock |
+| POST | `/api/v1/products/{id}/increase-stock?quantity=n` | Internal service call | Increase stock |
+
+### 4.4 Inventory Service (`/api/v1/inventory`)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/v1/inventory/health` | Public | Health check |
+| GET | `/api/v1/inventory/{productId}` | Bearer JWT (`CUSTOMER/SELLER/ADMIN`) | Check available stock |
+| POST | `/api/v1/inventory/reserve` | Bearer JWT (`ADMIN`) | Reserve stock (supports `Idempotency-Key`) |
+| POST | `/api/v1/inventory/release` | Bearer JWT (`ADMIN`) | Release reserved stock (compensation) |
+| GET | `/api/v1/inventory/simulate-cpu` | Bearer JWT (`ADMIN`) | CPU load simulation |
+| GET | `/api/v1/inventory/simulate-memory` | Bearer JWT (`ADMIN`) | Memory load simulation |
+
+### 4.5 Payment Service (`/api/v1/payments`)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/api/v1/payments/health` | Public | Health check |
+| POST | `/api/v1/payments/pay` | Bearer JWT (`ADMIN`) | Process payment (supports `Idempotency-Key`) |
+| POST | `/api/v1/payments/refund` | Bearer JWT (`ADMIN`) | Refund payment (compensation) |
+| GET | `/api/v1/payments/order/{orderId}` | Bearer JWT (`ADMIN`) | Payment timeline by order |
+| GET | `/api/v1/payments/simulate-cpu` | Bearer JWT (`ADMIN`) | CPU load simulation |
+| GET | `/api/v1/payments/simulate-memory` | Bearer JWT (`ADMIN`) | Memory load simulation |
+| GET | `/api/v1/payments/simulate-load` | Bearer JWT (`ADMIN`) | Generic load simulation |
+
+### 4.6 Order Service (`/api/v1/orders`)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/v1/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | Create order via Saga (requires `Idempotency-Key`) |
+| GET | `/api/v1/orders` | Bearer JWT (`CUSTOMER/ADMIN`) | List current user orders |
+| GET | `/api/v1/orders?userId=<uuid>` | Bearer JWT (`ADMIN`) | Query orders by user |
+| GET | `/api/v1/orders/{id}/saga` | Bearer JWT (`CUSTOMER/ADMIN`) | List saga steps for an order |
+| PATCH | `/api/v1/orders/{id}/cancel` | Bearer JWT (`CUSTOMER/ADMIN`) | Cancel order + compensation |
+| GET | `/api/v1/orders/outbox/pending?limit=20` | Bearer JWT (`ADMIN`) | Pending outbox events |
 
 ## 5. Environment Variables
 
@@ -161,8 +176,7 @@ Minimal required values in `.env`:
 
 ```env
 AUTH_JWT_SECRET=<long-random-secret>
-BOOTSTRAP_ADMIN_EMAIL=<admin-email>
-BOOTSTRAP_ADMIN_PASSWORD=<strong-admin-password>
+INTERNAL_SERVICE_TOKEN=<long-random-internal-service-token>
 USER_DB_PASSWORD=<password>
 PRODUCT_DB_PASSWORD=<password>
 ORDER_DB_PASSWORD=<password>
@@ -174,6 +188,10 @@ GRAFANA_ADMIN_PASSWORD=<strong-password>
 
 Optional tuning (already in `.env.example`):
 
+- User bootstrap admin (compose has defaults if omitted):
+  - `BOOTSTRAP_ADMIN_NAME`
+  - `BOOTSTRAP_ADMIN_EMAIL`
+  - `BOOTSTRAP_ADMIN_PASSWORD`
 - User auth hardening:
   - `JWT_EXPIRES_MINUTES`
   - `JWT_REFRESH_EXPIRES_MINUTES`
@@ -316,5 +334,6 @@ Useful URLs:
 ## 11. Notes
 
 - API contracts are under `api-contracts/`.
+- Current OpenAPI contracts are maintained for `user-service`, `product-service`, and `order-service`.
 - Front-end communicates only through `api-gateway`.
 - For local browser use, CORS is configured in gateway for `http://localhost:5173`.
