@@ -318,6 +318,18 @@ pipeline {
             }
         }
 
+        stage('Prepare Trivy DB') {
+            when {
+                expression { anyServiceBuildEnabled() }
+            }
+            steps {
+                sh """
+                  mkdir -p ${env.TRIVY_CACHE_DIR}
+                  trivy image --download-db-only --cache-dir ${env.TRIVY_CACHE_DIR}
+                """
+            }
+        }
+
         /* =========================
            SERVICE PIPELINES
         ========================= */
@@ -339,7 +351,13 @@ pipeline {
                                 }
 
                                 stage("Build ${service.name}") {
-                                    sh "DOCKER_BUILDKIT=1 docker build -t ${imageRef(service)} ./${service.dir}"
+                                    sh """
+                                      DOCKER_BUILDKIT=1 docker build \
+                                        --cache-from=${env.DOCKERHUB_USER}/${env.PROJECT}-${service.image}:latest \
+                                        -t ${imageRef(service)} \
+                                        -t ${env.DOCKERHUB_USER}/${env.PROJECT}-${service.image}:latest \
+                                        ./${service.dir}
+                                    """
                                 }
 
                                 stage("Trivy Source Scan ${service.name}") {
@@ -347,6 +365,7 @@ pipeline {
                                         sh """
                                           mkdir -p "${env.TRIVY_CACHE_DIR}"
                                           trivy fs \
+                                            --skip-db-update \
                                             --cache-dir ${env.TRIVY_CACHE_DIR} \
                                             --severity ${env.TRIVY_SOURCE_SEVERITY} \
                                             --scanners vuln \
@@ -362,6 +381,7 @@ pipeline {
                                         sh """
                                           mkdir -p "${env.TRIVY_CACHE_DIR}"
                                           trivy image \
+                                            --skip-db-update \
                                             --cache-dir ${env.TRIVY_CACHE_DIR} \
                                             --severity ${env.TRIVY_SEVERITY} \
                                             --exit-code ${env.TRIVY_EXIT_CODE} \
@@ -372,7 +392,10 @@ pipeline {
                                 }
 
                                 stage("Push ${service.name}") {
-                                    sh "docker push ${imageRef(service)}"
+                                    sh """
+                                      docker push ${imageRef(service)}
+                                      docker push ${env.DOCKERHUB_USER}/${env.PROJECT}-${service.image}:latest
+                                    """
                                 }
 
                                 stage("GitOps Update ${service.name}") {
@@ -429,4 +452,3 @@ pipeline {
         }
     }
 }
-// CI_TRIGGER_NOTE
