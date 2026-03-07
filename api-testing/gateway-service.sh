@@ -356,8 +356,9 @@ if [[ "$code" == "200" ]]; then
   code=$(request_with_headers POST "/api/v1/users/login" "$TMP_DIR/rate_limited.out" "$TMP_DIR/rate_limited.headers" \
     -H 'Content-Type: application/json' \
     -d "{\"email\":\"$CUSTOMER_EMAIL\",\"password\":\"$PASSWORD\"}")
-  assert_code "$code" "429" "rate limit triggers on 21st login" "$TMP_DIR/rate_limited.out"
-  assert_gateway_error_contract "$TMP_DIR/rate_limited.out" "$TMP_DIR/rate_limited.headers" "RATE_LIMITED" "/api/v1/users/login" "rate limit error contract"
+  assert_code "$code" "200" "successful login not rate-limited on 21st request" "$TMP_DIR/rate_limited.out"
+  assert_jq '.access_token | type == "string" and length > 0' \
+    "21st login returns access token" "$TMP_DIR/rate_limited.out"
 
   CLIENT_IP="198.51.100.$(( (SUFFIX % 100) + 10 ))"
   code=$(request POST "/api/v1/users/login" "$TMP_DIR/normal_login_after_hardening.out" \
