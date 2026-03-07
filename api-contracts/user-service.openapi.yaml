@@ -5,7 +5,7 @@ info:
 servers:
   - url: http://localhost:9000
 paths:
-  /api/users/health:
+  /api/v1/users/health:
     get:
       summary: Health check
       tags: [System]
@@ -18,7 +18,7 @@ paths:
                 type: string
                 example: OK
 
-  /api/users:
+  /api/v1/users:
     post:
       summary: Register a new user
       description: Public registration. ADMIN role is not allowed via this endpoint.
@@ -115,7 +115,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/login:
+  /api/v1/users/login:
     post:
       summary: Login
       tags: [Auth]
@@ -145,7 +145,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/by-email:
+  /api/v1/users/by-email:
     get:
       summary: Get user by email
       tags: [Users]
@@ -178,7 +178,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/email-exists:
+  /api/v1/users/email-exists:
     get:
       summary: Check if email exists
       tags: [Users]
@@ -205,7 +205,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/stats:
+  /api/v1/users/stats:
     get:
       summary: User statistics
       tags: [Users]
@@ -219,7 +219,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserStatsResponse'
 
-  /api/users/{id}:
+  /api/v1/users/{id}:
     get:
       summary: Get user by id
       tags: [Users]
@@ -303,7 +303,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/{id}/activate:
+  /api/v1/users/{id}/activate:
     patch:
       summary: Activate user
       tags: [Users]
@@ -327,7 +327,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/{id}/deactivate:
+  /api/v1/users/{id}/deactivate:
     patch:
       summary: Deactivate user
       tags: [Users]
@@ -351,7 +351,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/{id}/exists:
+  /api/v1/users/{id}/exists:
     get:
       summary: Check if active user exists by id
       tags: [Internal]
@@ -373,7 +373,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/{id}/role:
+  /api/v1/users/{id}/role:
     get:
       summary: Get active user role by id
       tags: [Internal]
@@ -401,7 +401,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/{id}/validate:
+  /api/v1/users/{id}/validate:
     get:
       summary: Validate user id and return role/status
       tags: [Internal]
@@ -423,7 +423,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/users/internal/users/{id}/validate:
+  /api/v1/users/internal/users/{id}/validate:
     get:
       summary: Internal alias for user validation
       tags: [Internal]

@@ -63,6 +63,7 @@ services:
       DB_URL: jdbc:postgresql://product-db:5432/product_db
       DB_USER: product
       DB_PASSWORD: ${PRODUCT_DB_PASSWORD:?PRODUCT_DB_PASSWORD is required}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN is required}
       OTEL_SERVICE_NAME: product-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
@@ -98,6 +99,7 @@ services:
       DB_USER: inventory
       DB_PASSWORD: ${INVENTORY_DB_PASSWORD:?INVENTORY_DB_PASSWORD is required}
       PRODUCT_SERVICE_BASE_URL: http://product-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN is required}
       REDIS_ADDR: redis:6379
       ORDER_EVENTS_CHANNEL: orders.events
       CHAOS_MODE: ${CHAOS_MODE:-false}
@@ -139,6 +141,7 @@ services:
       DB_URL: jdbc:postgresql://payment-db:5432/payment_db
       DB_USER: payment
       DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?PAYMENT_DB_PASSWORD is required}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN is required}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       PAYMENT_FAILURE_PROBABILITY: ${PAYMENT_FAILURE_PROBABILITY:-0.0}
@@ -188,6 +191,7 @@ services:
       DB_URL: jdbc:postgresql://order-db:5432/order_db
       DB_USER: order
       DB_PASSWORD: ${ORDER_DB_PASSWORD:?ORDER_DB_PASSWORD is required}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN is required}
       PRODUCT_SERVICE_BASE_URL: http://product-service:8080
       INVENTORY_SERVICE_BASE_URL: http://inventory-service:8080
       PAYMENT_SERVICE_BASE_URL: http://payment-service:8080
@@ -229,6 +233,7 @@ services:
       ORDER_SERVICE_URL: http://order-service:8080
       INVENTORY_SERVICE_URL: http://inventory-service:8080
       PAYMENT_SERVICE_URL: http://payment-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN is required}
       GATEWAY_ALLOWED_ORIGIN_PATTERN: http://localhost:5173
       SECURITY_JWT_ENABLED: "true"
       SECURITY_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}

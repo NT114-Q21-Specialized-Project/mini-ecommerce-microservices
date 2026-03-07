@@ -5,7 +5,7 @@ info:
 servers:
   - url: http://localhost:9000
 paths:
-  /api/orders:
+  /api/v1/orders:
     post:
       summary: Create order
       tags: [Orders]
@@ -60,7 +60,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Order'
-  /api/orders/{id}/cancel:
+  /api/v1/orders/{id}/cancel:
     patch:
       summary: Cancel order
       tags: [Orders]
@@ -82,7 +82,7 @@ paths:
                 $ref: '#/components/schemas/Order'
         '400':
           description: Bad request
-  /api/orders/outbox/pending:
+  /api/v1/orders/outbox/pending:
     get:
       summary: Get pending outbox events (admin)
       tags: [Outbox]
@@ -152,7 +152,7 @@ components:
           format: double
         status:
           type: string
-          enum: [CREATED, CANCELLED]
+          enum: [CREATED, INVENTORY_RESERVED, PAYMENT_PENDING, CONFIRMED, FAILED, CANCELLED]
         createdAt:
           type: string
           format: date-time

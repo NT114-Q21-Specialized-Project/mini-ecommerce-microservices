@@ -48,11 +48,11 @@ public class OutboxPublisherWorker {
     }
 
     @Scheduled(fixedDelayString = "${outbox.publisher.fixed-delay-ms:1000}")
+    @Transactional
     public void runScheduled() {
         publishAvailableEvents();
     }
 
-    @Transactional
     public int publishAvailableEvents() {
         Instant now = Instant.now();
         List<OutboxEvent> readyEvents = outboxEventRepository.findReadyForPublish(
