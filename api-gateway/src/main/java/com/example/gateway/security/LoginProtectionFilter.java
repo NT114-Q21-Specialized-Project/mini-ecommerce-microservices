@@ -97,6 +97,10 @@ public class LoginProtectionFilter implements WebFilter, Ordered {
 
         synchronized (state) {
             if (status >= 200 && status < 300) {
+                // Successful authentication should clear transient rate-limit pressure
+                // so legitimate repeated logins do not get locked by stale counters.
+                state.requestWindowStartMs = now;
+                state.requestCount = 0;
                 state.failedAttempts = 0;
                 state.failedWindowStartMs = now;
                 return;
