@@ -33,6 +33,8 @@ public class OrderClientAdapter {
     private final String productServiceBaseUrl;
     private final String inventoryServiceBaseUrl;
     private final String paymentServiceBaseUrl;
+    private final String internalServiceToken;
+    private final String internalServiceCaller;
 
     private final int sagaMaxAttempts;
     private final long sagaInitialBackoffMs;
@@ -53,6 +55,8 @@ public class OrderClientAdapter {
             @Value("${clients.product-service.base-url}") String productServiceBaseUrl,
             @Value("${clients.inventory-service.base-url:http://inventory-service:8080}") String inventoryServiceBaseUrl,
             @Value("${clients.payment-service.base-url:http://payment-service:8080}") String paymentServiceBaseUrl,
+            @Value("${security.internal.token:}") String internalServiceToken,
+            @Value("${security.internal.caller:order-service}") String internalServiceCaller,
             @Value("${saga.retry.max-attempts:3}") int sagaMaxAttempts,
             @Value("${saga.retry.initial-backoff-ms:250}") long sagaInitialBackoffMs,
             @Value("${saga.circuit-breaker.failure-threshold:3}") int circuitBreakerFailureThreshold,
@@ -69,6 +73,13 @@ public class OrderClientAdapter {
         this.productServiceBaseUrl = trimTrailingSlash(productServiceBaseUrl);
         this.inventoryServiceBaseUrl = trimTrailingSlash(inventoryServiceBaseUrl);
         this.paymentServiceBaseUrl = trimTrailingSlash(paymentServiceBaseUrl);
+        this.internalServiceToken = internalServiceToken == null ? "" : internalServiceToken.trim();
+        this.internalServiceCaller = (internalServiceCaller == null || internalServiceCaller.isBlank())
+                ? "order-service"
+                : internalServiceCaller.trim();
+        if (this.internalServiceToken.isBlank()) {
+            throw new IllegalStateException("security.internal.token is required");
+        }
         this.sagaMaxAttempts = Math.max(1, sagaMaxAttempts);
         this.sagaInitialBackoffMs = Math.max(100, sagaInitialBackoffMs);
         this.chaosMode = chaosMode;
@@ -368,6 +379,8 @@ public class OrderClientAdapter {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Correlation-Id", correlationId);
+        headers.set("X-Internal-Caller", internalServiceCaller);
+        headers.set("X-Internal-Token", internalServiceToken);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             headers.set("Idempotency-Key", idempotencyKey);
         }

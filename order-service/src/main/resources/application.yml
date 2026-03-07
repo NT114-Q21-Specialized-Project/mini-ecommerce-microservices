@@ -46,6 +46,11 @@ chaos:
   delay:
     ms: ${CHAOS_DELAY_MS:0}
 
+security:
+  internal:
+    token: ${INTERNAL_SERVICE_TOKEN:}
+    caller: ${INTERNAL_SERVICE_CALLER:order-service}
+
 outbox:
   publisher:
     enabled: ${OUTBOX_PUBLISHER_ENABLED:true}

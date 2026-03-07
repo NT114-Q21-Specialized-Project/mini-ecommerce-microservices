@@ -36,6 +36,10 @@ chaos:
   delay:
     ms: ${CHAOS_DELAY_MS:0}
 
+security:
+  internal:
+    token: ${INTERNAL_SERVICE_TOKEN:}
+
 management:
   endpoints:
     web:

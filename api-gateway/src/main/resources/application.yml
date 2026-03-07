@@ -70,6 +70,8 @@ spring:
             - Path=/api/v1/inventory/**, /api/v1/inventory
           filters:
             - StripPrefix=2
+            - AddRequestHeader=X-Internal-Caller, api-gateway
+            - "AddRequestHeader=X-Internal-Token, ${INTERNAL_SERVICE_TOKEN:}"
 
         - id: payment-service
           uri: ${PAYMENT_SERVICE_URL:http://payment-service:8080}
@@ -77,6 +79,8 @@ spring:
             - Path=/api/v1/payments/**, /api/v1/payments
           filters:
             - StripPrefix=2
+            - AddRequestHeader=X-Internal-Caller, api-gateway
+            - "AddRequestHeader=X-Internal-Token, ${INTERNAL_SERVICE_TOKEN:}"
 
 management:
   endpoints:

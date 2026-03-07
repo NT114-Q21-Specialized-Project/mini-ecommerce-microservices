@@ -25,6 +25,11 @@ saga:
     max-attempts: 1
     initial-backoff-ms: 10
 
+security:
+  internal:
+    token: test-internal-token
+    caller: order-service
+
 outbox:
   publisher:
     enabled: true
