@@ -43,8 +43,10 @@ def runServiceTest(Map service) {
         case 'payment-service':
         case 'order-service':
             sh """
+              mkdir -p "\$HOME/.m2"
               docker run --rm \\
                 -v "\$PWD/${service.dir}:/app" \\
+                -v "\$HOME/.m2:/root/.m2" \\
                 -w /app \\
                 maven:3.9.6-eclipse-temurin-17 \\
                 mvn -B clean test
@@ -54,8 +56,10 @@ def runServiceTest(Map service) {
         case 'user-service':
         case 'inventory-service':
             sh """
+              mkdir -p "\$HOME/go/pkg/mod"
               docker run --rm \\
                 -v "\$PWD/${service.dir}:/app" \\
+                -v "\$HOME/go/pkg/mod:/go/pkg/mod" \\
                 -w /app \\
                 golang:1.24-alpine \\
                 sh -c "go test ./..."
@@ -64,8 +68,10 @@ def runServiceTest(Map service) {
 
         case 'frontend':
             sh """
+              mkdir -p "\$HOME/.npm"
               docker run --rm \\
                 -v "\$PWD/${service.dir}:/app" \\
+                -v "\$HOME/.npm:/root/.npm" \\
                 -w /app \\
                 node:20-alpine \\
                 sh -c "npm ci && npm run build"
@@ -76,7 +82,6 @@ def runServiceTest(Map service) {
             error "No test command configured for service: ${service.name}"
     }
 }
-
 def runParallelForSelected(String stagePrefix, Closure worker) {
     def tasks = [:]
 
@@ -116,7 +121,6 @@ def cleanupBuiltImages() {
     // Remove dangling layers and older resources to keep Jenkins workers clean.
     sh 'docker image prune -f || true'
     sh 'docker system prune -f --filter "until=24h" || true'
-    sh 'rm -rf .trivy-cache || true'
 }
 
 pipeline {
@@ -140,6 +144,7 @@ pipeline {
         TRIVY_SOURCE_SEVERITY = "MEDIUM,HIGH,CRITICAL"
         TRIVY_EXIT_CODE      = "1"
         TRIVY_IGNORE_UNFIXED = "true"
+        TRIVY_CACHE_DIR      = "${HOME}/.trivy-cache-mini-ecommerce"
     }
 
     stages {
@@ -169,8 +174,10 @@ pipeline {
         stage('Detect Changed Services') {
             steps {
                 script {
+                    sh 'git fetch --no-tags --depth=100 origin +refs/heads/main:refs/remotes/origin/main || true'
+
                     def changedFilesRaw = sh(
-                        script: 'git diff --name-only HEAD~1 HEAD || true',
+                        script: 'git diff --name-only origin/main...HEAD || true',
                         returnStdout: true
                     ).trim()
 
@@ -226,8 +233,10 @@ pipeline {
                   for spec in api-contracts/*.openapi.yaml; do
                     [ -f "$spec" ] || continue
                     echo "Validating contract: $spec"
+                    mkdir -p "$HOME/.npm"
                     docker run --rm \
                       -v "$PWD:/work" \
+                      -v "$HOME/.npm:/root/.npm" \
                       -w /work \
                       node:20-alpine \
                       sh -c "npx --yes @apidevtools/swagger-cli@4.0.4 validate $spec"
@@ -245,13 +254,39 @@ pipeline {
             }
             steps {
                 sh '''
-                  mkdir -p .trivy-cache
-                  docker run --rm \
-                    -v "$PWD/.trivy-cache:/root/.cache/" \
-                    ${TRIVY_IMAGE} image --download-db-only --no-progress
-                  docker run --rm \
-                    -v "$PWD/.trivy-cache:/root/.cache/" \
-                    ${TRIVY_IMAGE} image --download-java-db-only --no-progress
+                  set -e
+
+                  mkdir -p "${TRIVY_CACHE_DIR}"
+
+                  DB_META="${TRIVY_CACHE_DIR}/db/metadata.json"
+                  JAVA_DB_META="${TRIVY_CACHE_DIR}/java-db/metadata.json"
+                  REFRESH_WINDOW_MINUTES=360
+
+                  should_refresh() {
+                    metadata="$1"
+                    if [ ! -f "$metadata" ]; then
+                      return 0
+                    fi
+                    [ -n "$(find "$metadata" -mmin +${REFRESH_WINDOW_MINUTES} -print -quit)" ]
+                  }
+
+                  if should_refresh "$DB_META"; then
+                    echo "Refreshing Trivy vulnerability DB cache..."
+                    docker run --rm \
+                      -v "${TRIVY_CACHE_DIR}:/root/.cache/" \
+                      ${TRIVY_IMAGE} image --download-db-only --no-progress
+                  else
+                    echo "Reusing recent Trivy vulnerability DB cache."
+                  fi
+
+                  if should_refresh "$JAVA_DB_META"; then
+                    echo "Refreshing Trivy Java DB cache..."
+                    docker run --rm \
+                      -v "${TRIVY_CACHE_DIR}:/root/.cache/" \
+                      ${TRIVY_IMAGE} image --download-java-db-only --no-progress
+                  else
+                    echo "Reusing recent Trivy Java DB cache."
+                  fi
                 '''
             }
         }
@@ -331,7 +366,7 @@ pipeline {
                                 }
 
                                 stage("Build ${service.name}") {
-                                    sh "docker build -t ${imageRef(service)} ./${service.dir}"
+                                    sh "DOCKER_BUILDKIT=1 docker build -t ${imageRef(service)} ./${service.dir}"
                                 }
 
                                 stage("Trivy Source Scan ${service.name}") {
@@ -339,7 +374,7 @@ pipeline {
                                         sh """
                                           docker run --rm \
                                             -v "\$PWD:/work" \
-                                            -v "\$PWD/.trivy-cache:/root/.cache/" \
+                                            -v "${env.TRIVY_CACHE_DIR}:/root/.cache/" \
                                             -w /work \
                                             ${env.TRIVY_IMAGE} fs \
                                             --no-progress \
@@ -359,7 +394,7 @@ pipeline {
                                         sh """
                                           docker run --rm \
                                             -v /var/run/docker.sock:/var/run/docker.sock \
-                                            -v "\$PWD/.trivy-cache:/root/.cache/" \
+                                            -v "${env.TRIVY_CACHE_DIR}:/root/.cache/" \
                                             ${env.TRIVY_IMAGE} image \
                                             --no-progress \
                                             --skip-db-update \
@@ -431,5 +466,4 @@ pipeline {
         }
     }
 }
-
 // CI_TRIGGER_NOTE
