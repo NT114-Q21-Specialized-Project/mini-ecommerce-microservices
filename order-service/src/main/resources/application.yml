@@ -68,6 +68,24 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
+      slo:
+        "[http.server.requests]":
+          - 50ms
+          - 100ms
+          - 200ms
+          - 300ms
+          - 500ms
+          - 1s
+          - 2s
+          - 5s
+      minimum-expected-value:
+        "[http.server.requests]": 1ms
+      maximum-expected-value:
+        "[http.server.requests]": 5s
   endpoint:
     health:
       probes:
