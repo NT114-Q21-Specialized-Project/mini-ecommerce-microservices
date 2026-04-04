@@ -362,32 +362,36 @@ pipeline {
 
                                 stage("Trivy Source Scan ${service.name}") {
                                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                                        sh """
-                                          mkdir -p "${env.TRIVY_CACHE_DIR}"
-                                          trivy fs \
-                                            --skip-db-update \
-                                            --cache-dir ${env.TRIVY_CACHE_DIR} \
-                                            --severity ${env.TRIVY_SOURCE_SEVERITY} \
-                                            --scanners vuln \
-                                            --exit-code ${env.TRIVY_EXIT_CODE} \
-                                            --ignore-unfixed \
-                                            ./${service.dir}
-                                        """
+                                        lock(resource: 'trivy-cache') {
+                                            sh """
+                                              mkdir -p "${env.TRIVY_CACHE_DIR}"
+                                              trivy fs \
+                                                --skip-db-update \
+                                                --cache-dir ${env.TRIVY_CACHE_DIR} \
+                                                --severity ${env.TRIVY_SOURCE_SEVERITY} \
+                                                --scanners vuln \
+                                                --exit-code ${env.TRIVY_EXIT_CODE} \
+                                                --ignore-unfixed \
+                                                ./${service.dir}
+                                            """
+                                        }
                                     }
                                 }
 
                                 stage("Trivy Scan ${service.name}") {
                                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                                        sh """
-                                          mkdir -p "${env.TRIVY_CACHE_DIR}"
-                                          trivy image \
-                                            --skip-db-update \
-                                            --cache-dir ${env.TRIVY_CACHE_DIR} \
-                                            --severity ${env.TRIVY_SEVERITY} \
-                                            --exit-code ${env.TRIVY_EXIT_CODE} \
-                                            --ignore-unfixed \
-                                            ${imageRef(service)}
-                                        """
+                                        lock(resource: 'trivy-cache') {
+                                            sh """
+                                              mkdir -p "${env.TRIVY_CACHE_DIR}"
+                                              trivy image \
+                                                --skip-db-update \
+                                                --cache-dir ${env.TRIVY_CACHE_DIR} \
+                                                --severity ${env.TRIVY_SEVERITY} \
+                                                --exit-code ${env.TRIVY_EXIT_CODE} \
+                                                --ignore-unfixed \
+                                                ${imageRef(service)}
+                                            """
+                                        }
                                     }
                                 }
 
