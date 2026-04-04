@@ -9,7 +9,7 @@ COPY src ./src
 RUN mvn package -DskipTests
 
 # ===== Runtime stage =====
-FROM gcr.io/distroless/java17-debian12
+FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
