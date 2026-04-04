@@ -1,6 +1,7 @@
 package com.example.product.controller;
 
 import com.example.product.dto.ProductCreateRequest;
+import com.example.product.dto.ProductPatchRequest;
 import com.example.product.dto.ProductPageResponse;
 import com.example.product.dto.ProductResponse;
 import com.example.product.exception.BadRequestException;
@@ -38,7 +39,7 @@ public class ProductController {
     }
 
     // =========================
-    // CREATE PRODUCT (SELLER ONLY)
+    // CREATE PRODUCT (SELLER / ADMIN)
     // =========================
     @PostMapping
     public ResponseEntity<ProductResponse> create(
@@ -46,21 +47,48 @@ public class ProductController {
             @RequestHeader(value = "X-User-Role", required = false) String userRoleHeader,
             @Valid @RequestBody ProductCreateRequest request
     ) {
-        if (userIdHeader == null || userIdHeader.isEmpty()) {
-            throw new BadRequestException("MISSING_USER_ID", "Missing X-User-Id header");
-        }
-
-        try {
-            UUID.fromString(userIdHeader);
-        } catch (IllegalArgumentException e) {
-            throw new BadRequestException(
-                    "INVALID_USER_ID",
-                    "Invalid X-User-Id header format"
-            );
-        }
+        validateUserIdHeader(userIdHeader);
 
         ProductResponse created = service.create(request, userRoleHeader);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ProductResponse> replace(
+            @PathVariable UUID id,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleHeader,
+            @Valid @RequestBody ProductCreateRequest request
+    ) {
+        validateUserIdHeader(userIdHeader);
+
+        ProductResponse updated = service.replace(id, request, userRoleHeader);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<ProductResponse> patch(
+            @PathVariable UUID id,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleHeader,
+            @Valid @RequestBody ProductPatchRequest request
+    ) {
+        validateUserIdHeader(userIdHeader);
+
+        ProductResponse updated = service.patch(id, request, userRoleHeader);
+        return ResponseEntity.ok(updated);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(
+            @PathVariable UUID id,
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestHeader(value = "X-User-Role", required = false) String userRoleHeader
+    ) {
+        validateUserIdHeader(userIdHeader);
+
+        service.delete(id, userRoleHeader);
+        return ResponseEntity.noContent().build();
     }
 
     // =========================
@@ -136,5 +164,17 @@ public class ProductController {
                 internalToken.trim().getBytes(StandardCharsets.UTF_8),
                 internalServiceToken.getBytes(StandardCharsets.UTF_8)
         );
+    }
+
+    private void validateUserIdHeader(String userIdHeader) {
+        if (userIdHeader == null || userIdHeader.isEmpty()) {
+            throw new BadRequestException("MISSING_USER_ID", "Missing X-User-Id header");
+        }
+
+        try {
+            UUID.fromString(userIdHeader);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("INVALID_USER_ID", "Invalid X-User-Id header format");
+        }
     }
 }

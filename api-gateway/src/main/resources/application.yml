@@ -234,6 +234,11 @@ security:
         methods: [POST]
         roles: [SELLER, ADMIN]
 
+      - id: product-manage-by-id
+        path-pattern: /api/v1/products/{id}
+        methods: [PUT, PATCH, DELETE]
+        roles: [SELLER, ADMIN]
+
       - id: inventory-read
         path-pattern: /api/v1/inventory/**
         methods: [GET]

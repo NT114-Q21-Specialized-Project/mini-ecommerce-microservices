@@ -127,6 +127,9 @@ k0s ingress:   http://mini-ecommerce.tienphatng237.com
 | GET | `/api/v1/products` | Public | List products (`page,size,sortBy,sortDir,name,minPrice,maxPrice,minStock,maxStock`) |
 | GET | `/api/v1/products/{id}` | Public | Get product detail |
 | POST | `/api/v1/products` | Bearer JWT (`SELLER/ADMIN`) | Create product |
+| PUT | `/api/v1/products/{id}` | Bearer JWT (`SELLER/ADMIN`) | Replace product |
+| PATCH | `/api/v1/products/{id}` | Bearer JWT (`SELLER/ADMIN`) | Partially update product |
+| DELETE | `/api/v1/products/{id}` | Bearer JWT (`SELLER/ADMIN`) | Delete product |
 | POST | `/api/v1/products/{id}/decrease-stock?quantity=n` | Internal service call | Decrease stock |
 | POST | `/api/v1/products/{id}/increase-stock?quantity=n` | Internal service call | Increase stock |
 

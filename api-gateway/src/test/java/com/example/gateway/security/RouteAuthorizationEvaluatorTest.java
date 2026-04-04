@@ -33,6 +33,13 @@ class RouteAuthorizationEvaluatorTest {
     }
 
     @Test
+    void productManagementEndpointsAreRestrictedToSellerAndAdmin() {
+        assertThat(evaluator.authorize("/api/v1/products/p-1", HttpMethod.PUT, "SELLER", "u-2").allowed()).isTrue();
+        assertThat(evaluator.authorize("/api/v1/products/p-1", HttpMethod.PATCH, "ADMIN", "u-3").allowed()).isTrue();
+        assertThat(evaluator.authorize("/api/v1/products/p-1", HttpMethod.DELETE, "CUSTOMER", "u-4").allowed()).isFalse();
+    }
+
+    @Test
     void adminCanAccessPaymentEndpoints() {
         assertThat(evaluator.authorize("/api/v1/payments/pay", HttpMethod.POST, "ADMIN", "u-3").allowed()).isTrue();
         assertThat(evaluator.authorize("/api/v1/payments/order/123", HttpMethod.GET, "ADMIN", "u-3").allowed()).isTrue();

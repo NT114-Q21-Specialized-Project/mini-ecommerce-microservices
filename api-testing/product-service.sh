@@ -125,6 +125,51 @@ code=$(request POST "/api/v1/products" "$TMP_DIR/product_create_forbidden.out" \
   -d "{\"name\":\"Forbidden Product ${SUFFIX}\",\"price\":10,\"stock\":1}")
 assert_code "$code" "403" "customer cannot create product" "$TMP_DIR/product_create_forbidden.out"
 
+code=$(request PUT "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_replace_forbidden.out" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN" \
+  -d "{\"name\":\"Forbidden Replace ${SUFFIX}\",\"price\":210,\"stock\":3}")
+assert_code "$code" "403" "customer cannot replace product" "$TMP_DIR/product_replace_forbidden.out"
+
+code=$(request PUT "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_replace.out" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $SELLER_TOKEN" \
+  -d "{\"name\":\"Smoke Product Updated ${SUFFIX}\",\"price\":249.5,\"stock\":12}")
+assert_code "$code" "200" "replace product by seller" "$TMP_DIR/product_replace.out"
+if jq -e --arg name "Smoke Product Updated ${SUFFIX}" '.name == $name and .price == 249.5 and .stock == 12' "$TMP_DIR/product_replace.out" >/dev/null; then
+  echo "[PASS] replace product response"
+else
+  echo "[FAIL] replace product response"
+  cat "$TMP_DIR/product_replace.out"
+  exit 1
+fi
+
+code=$(request PATCH "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_patch.out" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $SELLER_TOKEN" \
+  -d "{\"stock\":6}")
+assert_code "$code" "200" "patch product by seller" "$TMP_DIR/product_patch.out"
+if jq -e --arg name "Smoke Product Updated ${SUFFIX}" '.name == $name and .price == 249.5 and .stock == 6' "$TMP_DIR/product_patch.out" >/dev/null; then
+  echo "[PASS] patch product response"
+else
+  echo "[FAIL] patch product response"
+  cat "$TMP_DIR/product_patch.out"
+  exit 1
+fi
+
+code=$(request PATCH "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_patch_invalid.out" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $SELLER_TOKEN" \
+  -d "{}")
+assert_code "$code" "400" "empty patch is rejected" "$TMP_DIR/product_patch_invalid.out"
+if jq -e '.error.code == "INVALID_PATCH_REQUEST"' "$TMP_DIR/product_patch_invalid.out" >/dev/null; then
+  echo "[PASS] empty patch error code"
+else
+  echo "[FAIL] empty patch error payload"
+  cat "$TMP_DIR/product_patch_invalid.out"
+  exit 1
+fi
+
 code=$(request GET "/api/v1/products" "$TMP_DIR/product_list.out")
 assert_code "$code" "200" "list products" "$TMP_DIR/product_list.out"
 
@@ -138,6 +183,13 @@ fi
 
 code=$(request GET "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_get.out")
 assert_code "$code" "200" "get product by id" "$TMP_DIR/product_get.out"
+if jq -e --arg name "Smoke Product Updated ${SUFFIX}" '.name == $name and .price == 249.5 and .stock == 6' "$TMP_DIR/product_get.out" >/dev/null; then
+  echo "[PASS] get product reflects latest update"
+else
+  echo "[FAIL] get product does not reflect latest update"
+  cat "$TMP_DIR/product_get.out"
+  exit 1
+fi
 
 code=$(request GET "/api/v1/products?page=0&size=5&sortBy=price&sortDir=desc&name=Smoke" "$TMP_DIR/product_page.out")
 assert_code "$code" "200" "list products with pagination/filter/sort" "$TMP_DIR/product_page.out"
@@ -156,6 +208,24 @@ if jq -e '.error.code == "INVALID_SORT_FIELD"' "$TMP_DIR/product_invalid_sort.ou
 else
   echo "[FAIL] invalid sortBy error payload"
   cat "$TMP_DIR/product_invalid_sort.out"
+  exit 1
+fi
+
+code=$(request DELETE "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_delete_forbidden.out" \
+  -H "Authorization: Bearer $CUSTOMER_TOKEN")
+assert_code "$code" "403" "customer cannot delete product" "$TMP_DIR/product_delete_forbidden.out"
+
+code=$(request DELETE "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_delete.out" \
+  -H "Authorization: Bearer $SELLER_TOKEN")
+assert_code "$code" "204" "delete product by seller" "$TMP_DIR/product_delete.out"
+
+code=$(request GET "/api/v1/products/$PRODUCT_ID" "$TMP_DIR/product_get_deleted.out")
+assert_code "$code" "404" "deleted product returns not found" "$TMP_DIR/product_get_deleted.out"
+if jq -e '.error.code == "PRODUCT_NOT_FOUND"' "$TMP_DIR/product_get_deleted.out" >/dev/null; then
+  echo "[PASS] deleted product not found error code"
+else
+  echo "[FAIL] deleted product error payload"
+  cat "$TMP_DIR/product_get_deleted.out"
   exit 1
 fi
 

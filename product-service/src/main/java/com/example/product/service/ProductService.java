@@ -1,6 +1,7 @@
 package com.example.product.service;
 
 import com.example.product.dto.ProductCreateRequest;
+import com.example.product.dto.ProductPatchRequest;
 import com.example.product.dto.ProductPageResponse;
 import com.example.product.dto.ProductResponse;
 import com.example.product.exception.BadRequestException;
@@ -34,15 +35,50 @@ public class ProductService {
     // CREATE PRODUCT (SELLER / ADMIN)
     // =========================
     public ProductResponse create(ProductCreateRequest request, String userRole) {
-        validateCreatorRole(userRole);
-        String normalizedName = request.getName().trim();
-
         Product product = new Product();
-        product.setName(normalizedName);
-        product.setPrice(request.getPrice());
-        product.setStock(request.getStock());
+        applyFullUpdate(product, request, userRole);
 
         return toResponse(repository.save(product));
+    }
+
+    @Transactional
+    public ProductResponse replace(UUID id, ProductCreateRequest request, String userRole) {
+        Product product = getProductOrThrow(id);
+        applyFullUpdate(product, request, userRole);
+        return toResponse(repository.save(product));
+    }
+
+    @Transactional
+    public ProductResponse patch(UUID id, ProductPatchRequest request, String userRole) {
+        validateProductManagerRole(userRole);
+
+        boolean hasChanges = request.getName() != null
+                || request.getPrice() != null
+                || request.getStock() != null;
+        if (!hasChanges) {
+            throw new BadRequestException("INVALID_PATCH_REQUEST", "At least one field must be provided");
+        }
+
+        Product product = getProductOrThrow(id);
+        if (request.getName() != null) {
+            product.setName(normalizeName(request.getName()));
+        }
+        if (request.getPrice() != null) {
+            product.setPrice(request.getPrice());
+        }
+        if (request.getStock() != null) {
+            product.setStock(request.getStock());
+        }
+
+        return toResponse(repository.save(product));
+    }
+
+    @Transactional
+    public void delete(UUID id, String userRole) {
+        validateProductManagerRole(userRole);
+        Product product = getProductOrThrow(id);
+        repository.delete(product);
+        repository.flush();
     }
 
     // =========================
@@ -151,14 +187,33 @@ public class ProductService {
         }
     }
 
-    private void validateCreatorRole(String userRole) {
+    private void applyFullUpdate(Product product, ProductCreateRequest request, String userRole) {
+        validateProductManagerRole(userRole);
+        product.setName(normalizeName(request.getName()));
+        product.setPrice(request.getPrice());
+        product.setStock(request.getStock());
+    }
+
+    private Product getProductOrThrow(UUID id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product not found"));
+    }
+
+    private void validateProductManagerRole(String userRole) {
         if (userRole == null || userRole.isBlank()) {
             throw new ForbiddenException("MISSING_ROLE", "Missing user role");
         }
 
         if (!"SELLER".equalsIgnoreCase(userRole) && !"ADMIN".equalsIgnoreCase(userRole)) {
-            throw new ForbiddenException("ROLE_NOT_ALLOWED", "Only SELLER or ADMIN can create product");
+            throw new ForbiddenException("ROLE_NOT_ALLOWED", "Only SELLER or ADMIN can manage product");
         }
+    }
+
+    private String normalizeName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new BadRequestException("INVALID_NAME", "name must not be blank");
+        }
+        return name.trim();
     }
 
     private void validateRange(Number min, Number max, String fieldName) {
