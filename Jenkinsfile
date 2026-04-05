@@ -3,8 +3,6 @@
  * Add a new service by appending one line in getServiceMatrix().
  */
 
-def GO_TEST_IMAGE = 'golang:1.25.8-alpine'
-
 def getServiceMatrix() {
     return [
         [name: 'api-gateway',    dir: 'api-gateway',   flag: 'BUILD_API_GATEWAY',  image: 'api-gateway'],
@@ -38,7 +36,16 @@ def imageRef(Map service) {
     return "${env.DOCKERHUB_USER}/${env.PROJECT}-${service.image}:${env.IMAGE_TAG}"
 }
 
+def detectTestImage(Map service) {
+    return sh(
+        returnStdout: true,
+        script: """awk 'toupper(\$1) == "FROM" { for (i = 2; i <= NF; i++) if (\$i !~ /^--/) { print \$i; exit } }' "${service.dir}/Dockerfile" """
+    ).trim()
+}
+
 def runServiceTest(Map service) {
+    def testImage = detectTestImage(service)
+
     switch (service.name) {
         case 'api-gateway':
         case 'product-service':
@@ -50,7 +57,7 @@ def runServiceTest(Map service) {
                 -v "\$PWD/${service.dir}:/app" \\
                 -v "\$HOME/.m2:/root/.m2" \\
                 -w /app \\
-                maven:3.9.6-eclipse-temurin-17 \\
+                ${testImage} \\
                 mvn -B clean test
             """
             break
@@ -63,7 +70,7 @@ def runServiceTest(Map service) {
                 -v "\$PWD/${service.dir}:/app" \\
                 -v "\$HOME/go/pkg/mod:/go/pkg/mod" \\
                 -w /app \\
-                ${GO_TEST_IMAGE} \\
+                ${testImage} \\
                 sh -c "go test ./..."
             """
             break
@@ -75,7 +82,7 @@ def runServiceTest(Map service) {
                 -v "\$PWD/${service.dir}:/app" \\
                 -v "\$HOME/.npm:/root/.npm" \\
                 -w /app \\
-                node:20-alpine \\
+                ${testImage} \\
                 sh -c "npm ci && npm run build"
             """
             break
