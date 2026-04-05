@@ -3,6 +3,8 @@
  * Add a new service by appending one line in getServiceMatrix().
  */
 
+def GO_TEST_IMAGE = 'golang:1.25.8-alpine'
+
 def getServiceMatrix() {
     return [
         [name: 'api-gateway',    dir: 'api-gateway',   flag: 'BUILD_API_GATEWAY',  image: 'api-gateway'],
@@ -61,7 +63,7 @@ def runServiceTest(Map service) {
                 -v "\$PWD/${service.dir}:/app" \\
                 -v "\$HOME/go/pkg/mod:/go/pkg/mod" \\
                 -w /app \\
-                golang:1.24-alpine \\
+                ${GO_TEST_IMAGE} \\
                 sh -c "go test ./..."
             """
             break
