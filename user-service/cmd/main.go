@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 
 	"user-service/internal/config"
 	"user-service/internal/handler"
+	"user-service/internal/migration"
 	"user-service/internal/repository"
 	"user-service/internal/service"
 )
@@ -85,30 +87,51 @@ func initTracer() func() {
 	}
 }
 
-func main() {
-	shutdown := initTracer()
-	defer shutdown()
-
+func waitForConfig(maxAttempts int, delay time.Duration) (*config.Config, error) {
 	var cfg *config.Config
 	var err error
 
-	// =========================
-	// WAIT FOR DB (RETRY)
-	// =========================
-	for i := 1; i <= 10; i++ {
+	for i := 1; i <= maxAttempts; i++ {
 		cfg, err = config.LoadConfig()
 		if err == nil {
 			log.Println("Connected to database")
-			break
+			return cfg, nil
 		}
 
-		log.Printf("Database not ready (attempt %d/10): %v\n", i, err)
-		time.Sleep(2 * time.Second)
+		log.Printf("Database not ready (attempt %d/%d): %v\n", i, maxAttempts, err)
+		time.Sleep(delay)
 	}
 
+	return nil, err
+}
+
+func runMigrations() {
+	cfg, err := waitForConfig(10, 2*time.Second)
 	if err != nil {
 		log.Fatalf("Cannot connect to database after retries: %v", err)
 	}
+	defer cfg.DB.Close()
+
+	migrationsDir := getEnv("MIGRATIONS_DIR", filepath.Join("/app", "migrations"))
+	log.Printf("Running database migrations from %s", migrationsDir)
+
+	runner := migration.NewRunner(cfg.DB, migrationsDir)
+	if err := runner.Run(context.Background()); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
+
+	log.Println("Database migrations completed successfully")
+}
+
+func runServer() {
+	shutdown := initTracer()
+	defer shutdown()
+
+	cfg, err := waitForConfig(10, 2*time.Second)
+	if err != nil {
+		log.Fatalf("Cannot connect to database after retries: %v", err)
+	}
+	defer cfg.DB.Close()
 
 	// =========================
 	// INIT DEPENDENCIES
@@ -200,4 +223,18 @@ func main() {
 		":8080",
 		otelhttp.NewHandler(r, "user-service"),
 	))
+}
+
+func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "migrate":
+			runMigrations()
+			return
+		default:
+			log.Fatalf("unknown command: %s", os.Args[1])
+		}
+	}
+
+	runServer()
 }
