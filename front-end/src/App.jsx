@@ -1,19 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
+  ArrowRight,
+  BellDot,
   Boxes,
+  CircleDollarSign,
   CreditCard,
   GitBranch,
   ListOrdered,
+  LogOut,
   Search,
   ShieldCheck,
   ShoppingBag,
-  ShoppingCart,
+  Sparkles,
   Store,
   Users2,
 } from 'lucide-react';
 
 import Message from './components/Layout/Message';
+import MediaSlot from './components/Layout/MediaSlot';
 import AuthForm from './components/Auth/AuthForm';
 import UserSidebar from './components/User/UserSidebar';
 import ProductList from './components/Product/ProductList';
@@ -33,6 +38,62 @@ const navItems = [
   { path: '/users', label: 'Users', icon: Users2 },
   { path: '/admin', label: 'Admin', icon: ShieldCheck, roles: ['ADMIN'] },
 ];
+
+const routeContent = {
+  '/dashboard': {
+    eyebrow: 'Curated Command View',
+    description: 'Theo dõi products, inventory và order flow trong một layout thoáng hơn, dễ nhìn hơn.',
+    heroEyebrow: 'New Arrival Dashboard',
+    heroTitle: 'A cleaner storefront cockpit for your microservices stack.',
+    heroDescription:
+      'Giữ navigation, search, catalog và order summary trên cùng một canvas để team thao tác nhanh hơn.',
+    searchPlaceholder: 'Search products, sellers, or keywords...',
+  },
+  '/products': {
+    eyebrow: 'Catalog Studio',
+    description: 'Duyệt, tìm kiếm và chuẩn bị các card sản phẩm với bố cục thiên về visual merchandising.',
+    heroEyebrow: 'Catalog Curation',
+    heroTitle: 'Shape the product wall before the next traffic wave.',
+    heroDescription: 'Không gian chính dành cho listing, artwork và thao tác tạo sản phẩm mới.',
+    searchPlaceholder: 'Search products, SKUs, or launch names...',
+  },
+  '/inventory': {
+    eyebrow: 'Inventory Window',
+    description: 'Soát tồn kho và phát hiện low-stock items trước khi order queue tăng mạnh.',
+    heroEyebrow: 'Inventory Pulse',
+    heroTitle: 'Keep stock visibility front and center.',
+    heroDescription: 'Bảng điều khiển tập trung để refresh snapshot và chốt các sản phẩm sắp chạm ngưỡng.',
+    searchPlaceholder: 'Search products inside inventory...',
+  },
+  '/orders': {
+    eyebrow: 'Order Stream',
+    description: 'Theo dõi đơn hàng gần nhất, tổng giá trị và những order đang chờ xử lý.',
+    heroEyebrow: 'Fulfillment View',
+    heroTitle: 'A calmer way to watch every checkout move.',
+    heroDescription: 'Thông tin đơn hàng được gom lại để dễ đọc, dễ kiểm soát và dễ hủy khi cần.',
+  },
+  '/saga': {
+    eyebrow: 'Saga Explorer',
+    description: 'Theo dấu từng step trong order saga và timeline thanh toán theo cách trực quan hơn.',
+    heroEyebrow: 'Distributed Trace',
+    heroTitle: 'Open the story behind every order flow.',
+    heroDescription: 'Từ từng step đến payment event, mọi chuyển động đều nằm trong một màn hình rõ ràng.',
+  },
+  '/users': {
+    eyebrow: 'People Directory',
+    description: 'Giữ thông tin user hiện tại và user list ở một vùng nhìn tập trung hơn.',
+    heroEyebrow: 'Team Access',
+    heroTitle: 'Profile and operators, without the clutter.',
+    heroDescription: 'Khu vực này thiên về nhân sự hệ thống, quyền truy cập và tình trạng user hiện hành.',
+  },
+  '/admin': {
+    eyebrow: 'Admin Space',
+    description: 'Khu vực dành cho metrics, policy và audit khi module này được mở rộng thêm.',
+    heroEyebrow: 'Control Layer',
+    heroTitle: 'Reserved for deeper platform controls.',
+    heroDescription: 'Phần nền đã sẵn để mình mở rộng tiếp cho governance, policy và admin tooling.',
+  },
+};
 
 function App() {
   const [isLoginView, setIsLoginView] = useState(true);
@@ -123,6 +184,19 @@ function App() {
     const normalized = searchTerm.trim().toLowerCase();
     return products.filter((product) => product.name?.toLowerCase().includes(normalized));
   }, [products, searchTerm]);
+
+  const currentRouteContent = routeContent[route] || routeContent[DEFAULT_ROUTE];
+  const greetingName = currentUser?.name?.trim()?.split(/\s+/)?.[0] || 'Operator';
+  const liveProductCount = products.filter((product) => Number(product.stock || 0) > 0).length;
+  const lowStockCount = products.filter((product) => {
+    const stock = Number(product.stock || 0);
+    return stock > 0 && stock <= 5;
+  }).length;
+  const totalCatalogValue = products.reduce(
+    (sum, product) => sum + Number(product.price || 0) * Math.max(Number(product.stock || 0), 1),
+    0
+  );
+  const pendingOrderCount = orders.filter((order) => !['CONFIRMED', 'FAILED', 'CANCELLED'].includes(order.status)).length;
 
   const isRouteAllowed = (item) => !item.roles || (role && item.roles.includes(role));
   const showSearchBar = ['/dashboard', '/products', '/inventory'].includes(route);
@@ -435,8 +509,20 @@ function App() {
 
   const renderMainContent = () => {
     switch (route) {
-      case '/products':
       case '/dashboard':
+        return (
+          <ProductList
+            products={filteredProducts.slice(0, 4)}
+            onRefresh={fetchProducts}
+            onBuy={createOrder}
+            loading={loading}
+            currentUser={currentUser}
+            onOpenAddModal={() => setIsProductModalOpen(true)}
+            title="New Trend Selection"
+            subtitle="Bốn sản phẩm nổi bật được kéo lên ngay dưới hero để giữ bố cục dashboard gọn và giống mockup hơn."
+          />
+        );
+      case '/products':
         return (
           <ProductList
             products={filteredProducts}
@@ -445,6 +531,8 @@ function App() {
             loading={loading}
             currentUser={currentUser}
             onOpenAddModal={() => setIsProductModalOpen(true)}
+            title="Catalog Collection"
+            subtitle="Toàn bộ sản phẩm được trình bày theo layout card lớn hơn, thiên về showcase và thao tác nhanh."
           />
         );
       case '/inventory':
@@ -458,6 +546,7 @@ function App() {
               currentUser={currentUser}
               onRefresh={fetchOrders}
               onCancel={cancelOrder}
+              variant="full"
             />
           );
         }
@@ -482,6 +571,8 @@ function App() {
             loading={loading}
             currentUser={currentUser}
             onOpenAddModal={() => setIsProductModalOpen(true)}
+            title="Catalog Collection"
+            subtitle="Toàn bộ sản phẩm được trình bày theo layout card lớn hơn, thiên về showcase và thao tác nhanh."
           />
         );
     }
@@ -705,16 +796,32 @@ function App() {
         {!currentUser ? (
           <section className="auth-stage">
             <div className="auth-frame">
-              <div className="hidden space-y-3 px-2 lg:block">
-                <p className="inline-flex items-center rounded-full border border-sky-200/70 bg-white/75 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-sky-700">
-                  Store Operations
-                </p>
-                <h1 className="text-4xl font-bold leading-tight text-slate-900 xl:text-5xl">
-                  A calm place to control your ecommerce platform.
-                </h1>
-                <p className="max-w-[480px] text-sm text-slate-600">
-                  Đăng nhập để quản lý user, sản phẩm và đơn hàng từ một dashboard thống nhất.
-                </p>
+              <div className="hidden px-2 lg:block">
+                <div className="rounded-[42px] bg-slate-950 p-8 text-white shadow-[0_30px_90px_rgba(15,23,42,0.22)]">
+                  <p className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                    Store Operations
+                  </p>
+                  <h1 className="mt-5 text-4xl font-bold leading-tight xl:text-5xl">
+                    Redesign the storefront dashboard without losing the working flow.
+                  </h1>
+                  <p className="mt-4 max-w-[520px] text-sm leading-7 text-slate-300">
+                    Layout mới chia rõ rail trái, hero catalog ở giữa và order summary bên phải để thao tác bớt rối mắt.
+                  </p>
+
+                  <div className="mt-8 grid gap-4 md:grid-cols-2">
+                    {[
+                      ['Catalog', `${products.length} products synced`],
+                      ['Orders', `${orders.length} orders tracked`],
+                      ['Media Slot', 'public/dashboard-media/...'],
+                      ['Auth', 'Unified sign-in for all roles'],
+                    ].map(([title, value]) => (
+                      <div key={title} className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/55">{title}</p>
+                        <p className="mt-2 text-sm font-semibold text-white">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <AuthForm
@@ -728,120 +835,178 @@ function App() {
             </div>
           </section>
         ) : (
-          <div className="grid gap-5 lg:grid-cols-[92px_minmax(0,1fr)_340px] xl:grid-cols-[92px_minmax(0,1fr)_360px]">
-            <aside className="dashboard-rail glass-panel sticky top-4 hidden h-fit flex-col items-center gap-6 rounded-[34px] border px-4 py-6 text-slate-600 lg:flex">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-blue-700 text-white shadow-lg shadow-sky-200/70">
-                <ShoppingCart className="h-6 w-6" />
-              </div>
-              <nav className="flex flex-col items-center gap-3.5">
-                {navItems.map((item) => {
-                  const isAllowed = isRouteAllowed(item);
-                  const Icon = item.icon;
-                  if (!isAllowed) {
-                    return (
-                      <div
-                        key={item.label}
-                        className="flex h-11 w-11 items-center justify-center rounded-2xl border border-transparent bg-white/50 text-slate-300"
-                        title={`${item.label} (Restricted)`}
-                      >
-                        <Icon className="h-5 w-5" />
-                      </div>
-                    );
-                  }
+          <div
+            className={`grid gap-6 ${
+              showOrderSidebar
+                ? 'xl:grid-cols-[300px_minmax(0,1fr)_360px]'
+                : 'xl:grid-cols-[300px_minmax(0,1fr)]'
+            }`}
+          >
+            <UserSidebar
+              currentUser={currentUser}
+              users={users}
+              orders={orders}
+              products={products}
+              navItems={navItems}
+              route={route}
+            />
 
-                  const isActive = route === item.path;
-                  return (
-                    <a
-                      key={item.label}
-                      href={`#${item.path}`}
-                      className={`group flex h-11 w-11 items-center justify-center rounded-2xl border text-slate-500 shadow-sm transition hover:-translate-y-0.5 ${
-                        isActive
-                          ? 'border-sky-200 bg-gradient-to-br from-sky-500 to-blue-700 text-white shadow-md shadow-sky-200'
-                          : 'border-transparent bg-white/70 hover:border-sky-200 hover:bg-white hover:text-sky-700'
-                      }`}
-                      title={item.label}
+            <main className="space-y-6">
+              <header className="dashboard-card rounded-[38px] border px-5 py-5 md:px-6">
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-sky-600">
+                      {currentRouteContent.eyebrow}
+                    </p>
+                    <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+                      Hello, {greetingName}
+                    </h1>
+                    <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">
+                      {currentRouteContent.description}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    {showSearchBar && (
+                      <div className="relative min-w-[260px] flex-1 xl:max-w-[360px]">
+                        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-500" />
+                        <input
+                          type="text"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          placeholder={currentRouteContent.searchPlaceholder}
+                          className="dashboard-input w-full rounded-full py-3 pl-11 pr-4 text-sm font-medium text-slate-700 outline-none"
+                        />
+                      </div>
+                    )}
+                    <div className="chip-soft inline-flex items-center gap-2 rounded-full px-4 py-3 text-xs font-semibold text-slate-600">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow shadow-emerald-200" />
+                      Live sync
+                    </div>
+                    <button
+                      type="button"
+                      className="chip-soft inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-600 transition hover:text-sky-700"
+                      aria-label="Notifications"
                     >
-                      <Icon className="h-5 w-5" />
-                    </a>
-                  );
-                })}
-              </nav>
-              <div className="mt-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-100 text-sky-600">
-                <ShoppingCart className="h-5 w-5" />
-              </div>
-            </aside>
+                      <BellDot className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLogout()}
+                      className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-slate-800"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              </header>
 
-            <main className="space-y-5">
-              <div className="panel-surface flex flex-col gap-4 rounded-[32px] border px-5 py-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-600">
-                    Store Operations
-                  </p>
-                  <h1 className="mt-2 text-2xl font-bold text-slate-900 md:text-3xl">
-                    Mini Ecommerce Control Room
-                  </h1>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Theo dõi sản phẩm, đơn hàng và trạng thái realtime của hệ thống.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="chip-soft flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold text-slate-600">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                    Live sync
-                  </div>
-                  <div className="chip-soft rounded-full px-3 py-2 text-xs font-semibold text-slate-600">
-                    {currentUser.name} · {currentUser.role}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleLogout()}
-                    className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-700"
-                  >
-                    Đăng xuất
-                  </button>
-                </div>
-              </div>
+              <section className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_240px]">
+                <div className="dashboard-hero rounded-[40px] p-6 text-white md:p-8">
+                  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-end">
+                    <div className="relative z-[1]">
+                      <p className="inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.28em] text-white/85">
+                        <Sparkles className="h-4 w-4" />
+                        {currentRouteContent.heroEyebrow}
+                      </p>
+                      <h2 className="mt-5 max-w-xl text-3xl font-bold leading-tight md:text-4xl">
+                        {currentRouteContent.heroTitle}
+                      </h2>
+                      <p className="mt-4 max-w-xl text-sm leading-7 text-white/78">
+                        {currentRouteContent.heroDescription}
+                      </p>
 
-              {showSearchBar && (
-                <div className="panel-surface rounded-[30px] border px-5 py-4">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div className="relative flex-1">
-                      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-500" />
-                      <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Search products, vendors, or keywords..."
-                        className="dashboard-input w-full py-3 pl-11 pr-4 text-sm font-medium text-slate-700 outline-none"
-                      />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="chip-soft rounded-2xl px-4 py-3 text-xs font-semibold text-sky-700">
-                        Products: {products.length}
+                      <div className="mt-6 flex flex-wrap gap-3">
+                        <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white">
+                          {liveProductCount} live products
+                        </span>
+                        <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white">
+                          {pendingOrderCount} orders in progress
+                        </span>
+                        <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white">
+                          {lowStockCount} low-stock alerts
+                        </span>
                       </div>
-                      <div className="chip-soft rounded-2xl px-4 py-3 text-xs font-semibold text-sky-700">
-                        Orders: {orders.length}
+
+                      <div className="mt-8 flex flex-wrap items-center gap-3">
+                        {(currentUser.role === 'SELLER' || currentUser.role === 'ADMIN') && (
+                          <button
+                            type="button"
+                            onClick={() => setIsProductModalOpen(true)}
+                            className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-lg shadow-cyan-900/10 transition hover:-translate-y-0.5"
+                          >
+                            Create Product
+                            <ArrowRight className="h-4 w-4" />
+                          </button>
+                        )}
+
+                        <a
+                          href="#/products"
+                          className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
+                        >
+                          Open Catalog
+                          <ArrowRight className="h-4 w-4" />
+                        </a>
                       </div>
                     </div>
+
+                    <MediaSlot
+                      src="/dashboard-media/hero/hero-main.png"
+                      alt="Hero dashboard artwork"
+                      title="Hero artwork slot"
+                      hint="Add public/dashboard-media/hero/hero-main.png"
+                      className="h-[280px] rounded-[32px] border border-white/15 bg-white/10 p-3"
+                      imgClassName="h-full w-full rounded-[24px] object-cover"
+                    />
                   </div>
                 </div>
-              )}
+
+                <div className="grid gap-4 sm:grid-cols-3 2xl:grid-cols-1">
+                  <div className="dashboard-metric-card rounded-[30px] p-5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Catalog Value</p>
+                      <CircleDollarSign className="h-5 w-5 text-sky-600" />
+                    </div>
+                    <p className="mt-4 text-3xl font-bold text-slate-900">${totalCatalogValue.toFixed(0)}</p>
+                    <p className="mt-2 text-sm text-slate-500">Approx. live inventory value</p>
+                  </div>
+
+                  <div className="dashboard-metric-card rounded-[30px] p-5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Orders</p>
+                      <ListOrdered className="h-5 w-5 text-sky-600" />
+                    </div>
+                    <p className="mt-4 text-3xl font-bold text-slate-900">{orders.length}</p>
+                    <p className="mt-2 text-sm text-slate-500">{pendingOrderCount} orders vẫn đang mở</p>
+                  </div>
+
+                  <div className="dashboard-metric-card rounded-[30px] p-5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Inventory</p>
+                      <Boxes className="h-5 w-5 text-sky-600" />
+                    </div>
+                    <p className="mt-4 text-3xl font-bold text-slate-900">{liveProductCount}</p>
+                    <p className="mt-2 text-sm text-slate-500">Products còn tồn kho để bán</p>
+                  </div>
+                </div>
+              </section>
 
               {renderMainContent()}
             </main>
 
-            <aside className="space-y-5">
-              <UserSidebar currentUser={currentUser} users={users} orders={orders} />
-              {showOrderSidebar && (
+            {showOrderSidebar ? (
+              <aside className="xl:sticky xl:top-4 xl:h-fit">
                 <OrderPanel
                   orders={orders}
                   loading={loading}
                   currentUser={currentUser}
                   onRefresh={fetchOrders}
                   onCancel={cancelOrder}
+                  variant="sidebar"
                 />
-              )}
-            </aside>
+              </aside>
+            ) : null}
           </div>
         )}
 

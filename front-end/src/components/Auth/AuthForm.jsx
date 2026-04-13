@@ -15,23 +15,28 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="mx-auto w-full max-w-[430px]">
-      <div className="auth-card rounded-[30px] border p-6 shadow-2xl md:p-8">
-        <div className="mb-5 flex items-center justify-center">
-          <div className="auth-pill inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-sky-700">
+    <div className="mx-auto w-full max-w-[460px]">
+      <div className="auth-card rounded-[36px] border p-6 shadow-2xl md:p-8">
+        <div className="mb-6 flex items-center justify-between">
+          <div className="auth-pill inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.24em] text-sky-700">
             <Fingerprint className="h-3.5 w-3.5" />
             Mini Ecommerce
           </div>
+          <span className="rounded-full bg-slate-950 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
+            {isLoginView ? 'Sign In' : 'Sign Up'}
+          </span>
         </div>
 
-        <h2 className="text-center text-[34px] font-bold leading-[1.05] text-slate-900 md:text-[38px]">
-          E-commerce Microservices
+        <h2 className="text-[34px] font-bold leading-[1.02] text-slate-900 md:text-[40px]">
+          {isLoginView ? 'Calm control for every service.' : 'Create a fresh operator account.'}
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-500">
-          {isLoginView ? 'Đăng nhập để truy cập toàn bộ microservices' : 'Tạo tài khoản mới cho workflow của bạn'}
+        <p className="mt-3 text-sm leading-6 text-slate-500">
+          {isLoginView
+            ? 'Đăng nhập để bước vào dashboard mới: catalog ở giữa, navigation bên trái, order pulse bên phải.'
+            : 'Tạo tài khoản để tham gia flow customer hoặc seller ngay trong cùng workspace.'}
         </p>
 
-        <form onSubmit={handleAuth} className="mt-6 space-y-3.5">
+        <form onSubmit={handleAuth} className="mt-7 space-y-3.5">
           {!isLoginView && (
             <label className="relative block">
               <User className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -40,7 +45,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
                 placeholder="Họ và tên"
                 required
                 value={formData.name}
-                className="auth-input w-full py-3 pl-11 pr-4 text-sm font-medium outline-none"
+                className="auth-input w-full py-3.5 pl-11 pr-4 text-sm font-medium outline-none"
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </label>
@@ -53,7 +58,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
               placeholder="Email"
               required
               value={formData.email}
-              className="auth-input w-full py-3 pl-11 pr-4 text-sm font-medium outline-none"
+              className="auth-input w-full py-3.5 pl-11 pr-4 text-sm font-medium outline-none"
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             />
           </label>
@@ -65,7 +70,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
               placeholder="Mật khẩu"
               required
               value={formData.password}
-              className="auth-input w-full py-3 pl-11 pr-11 text-sm font-medium outline-none"
+              className="auth-input w-full py-3.5 pl-11 pr-11 text-sm font-medium outline-none"
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
             />
             <button
@@ -83,7 +88,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
               <ShieldCheck className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <select
                 value={formData.role}
-                className="auth-input w-full appearance-none py-3 pl-11 pr-4 text-sm font-medium outline-none"
+                className="auth-input w-full appearance-none py-3.5 pl-11 pr-4 text-sm font-medium outline-none"
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               >
                 <option value="CUSTOMER">Customer</option>
@@ -107,14 +112,14 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
           <button
             disabled={loading}
             type="submit"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-600 to-blue-700 px-4 py-3 font-semibold text-white transition hover:from-sky-700 hover:to-blue-800 disabled:cursor-not-allowed disabled:from-slate-400 disabled:to-slate-500"
-        >
-          {isLoginView ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-          {loading ? 'Đang xử lý...' : isLoginView ? 'Đăng nhập' : 'Tạo tài khoản'}
-        </button>
+            className="inline-flex w-full items-center justify-center gap-2 rounded-[24px] bg-gradient-to-r from-sky-600 via-cyan-500 to-blue-700 px-4 py-3.5 font-semibold text-white transition hover:-translate-y-0.5 hover:from-sky-700 hover:via-cyan-600 hover:to-blue-800 disabled:cursor-not-allowed disabled:from-slate-400 disabled:via-slate-400 disabled:to-slate-500"
+          >
+            {isLoginView ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+            {loading ? 'Đang xử lý...' : isLoginView ? 'Đăng nhập' : 'Tạo tài khoản'}
+          </button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-slate-500">
+        <p className="mt-6 text-center text-sm text-slate-500">
           {isLoginView ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}
           <button
             type="button"

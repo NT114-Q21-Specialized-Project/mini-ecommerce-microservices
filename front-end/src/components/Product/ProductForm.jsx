@@ -26,14 +26,18 @@ const ProductForm = ({ isOpen, onClose, onSubmit, loading }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-      <div className="glass-panel w-full max-w-md rounded-[32px] border p-6 shadow-2xl md:p-8">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-slate-900">Đăng sản phẩm mới</h3>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-md">
+      <div className="glass-panel w-full max-w-md rounded-[36px] border p-6 shadow-2xl md:p-8">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-sky-600">Catalog Studio</p>
+            <h3 className="mt-2 text-2xl font-bold text-slate-900">Đăng sản phẩm mới</h3>
+            <p className="mt-2 text-sm text-slate-500">Tạo thêm một card mới để xuất hiện ngay trong dashboard.</p>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-2xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100"
+            className="rounded-[18px] border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100"
           >
             <X className="h-4 w-4" />
           </button>
@@ -44,7 +48,7 @@ const ProductForm = ({ isOpen, onClose, onSubmit, loading }) => {
             type="text"
             required
             placeholder="Tên sản phẩm"
-            className="w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200"
+            className="dashboard-input w-full rounded-[22px] px-4 py-3 outline-none"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           />
@@ -56,7 +60,7 @@ const ProductForm = ({ isOpen, onClose, onSubmit, loading }) => {
               min="0.01"
               step="0.01"
               placeholder="Giá"
-              className="w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200"
+              className="dashboard-input w-full rounded-[22px] px-4 py-3 outline-none"
               value={formData.price}
               onChange={(e) => setFormData({ ...formData, price: e.target.value })}
             />
@@ -65,7 +69,7 @@ const ProductForm = ({ isOpen, onClose, onSubmit, loading }) => {
               required
               min="0"
               placeholder="Tồn kho"
-              className="w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-200"
+              className="dashboard-input w-full rounded-[22px] px-4 py-3 outline-none"
               value={formData.stock}
               onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
             />
@@ -74,7 +78,7 @@ const ProductForm = ({ isOpen, onClose, onSubmit, loading }) => {
           <button
             disabled={loading}
             type="submit"
-            className="w-full rounded-2xl bg-sky-600 px-4 py-3 font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="w-full rounded-[24px] bg-slate-950 px-4 py-3 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
             {loading ? 'Đang xử lý...' : 'Xác nhận đăng'}
           </button>
