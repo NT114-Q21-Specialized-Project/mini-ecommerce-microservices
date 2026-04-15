@@ -1,21 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import {
-  ArrowRight,
-  BellDot,
-  Boxes,
-  CircleDollarSign,
-  CreditCard,
-  GitBranch,
-  ListOrdered,
-  LogOut,
-  Search,
-  ShieldCheck,
-  ShoppingBag,
-  Sparkles,
-  Store,
-  Users2,
-} from 'lucide-react';
+import { BellDot, Boxes, CreditCard, GitBranch, ListOrdered, LogOut, Search, ShieldCheck, ShoppingBag, Store, Users2 } from 'lucide-react';
 
 import Message from './components/Layout/Message';
 import MediaSlot from './components/Layout/MediaSlot';
@@ -23,7 +8,7 @@ import AuthForm from './components/Auth/AuthForm';
 import UserSidebar from './components/User/UserSidebar';
 import ProductList from './components/Product/ProductList';
 import ProductForm from './components/Product/ProductForm';
-import OrderPanel from './components/Order/OrderPanel';
+import { pickFeaturedProducts, sortProductsByNewest } from './components/Product/productMedia';
 
 const GATEWAY_URL = (import.meta.env.VITE_GATEWAY_URL || '/api/v1').replace(/\/$/, '');
 const SESSION_STORAGE_KEY = 'mini-ecom-session';
@@ -41,29 +26,28 @@ const navItems = [
 
 const routeContent = {
   '/dashboard': {
-    eyebrow: 'Curated Command View',
-    description: 'Theo dõi products, inventory và order flow trong một layout thoáng hơn, dễ nhìn hơn.',
-    heroEyebrow: 'New Arrival Dashboard',
-    heroTitle: 'A cleaner storefront cockpit for your microservices stack.',
-    heroDescription:
-      'Giữ navigation, search, catalog và order summary trên cùng một canvas để team thao tác nhanh hơn.',
+    eyebrow: 'Welcome back',
+    description: 'Explore now and keep the catalog, checkout flow, and orders in one clean board.',
+    heroEyebrow: 'New Arrival',
+    heroTitle: 'Just for you!',
+    heroDescription: 'Change your daily life with a modern lifestyle.',
     searchPlaceholder: 'Search products, sellers, or keywords...',
   },
   '/products': {
-    eyebrow: 'Catalog Studio',
-    description: 'Duyệt, tìm kiếm và chuẩn bị các card sản phẩm với bố cục thiên về visual merchandising.',
-    heroEyebrow: 'Catalog Curation',
-    heroTitle: 'Shape the product wall before the next traffic wave.',
-    heroDescription: 'Không gian chính dành cho listing, artwork và thao tác tạo sản phẩm mới.',
-    searchPlaceholder: 'Search products, SKUs, or launch names...',
+    eyebrow: 'Welcome back',
+    description: 'Explore now and browse the highlighted product wall.',
+    heroEyebrow: 'New Arrival',
+    heroTitle: 'Just for you!',
+    heroDescription: 'Change your daily life with a modern lifestyle.',
+    searchPlaceholder: 'Search Anything...',
   },
   '/inventory': {
-    eyebrow: 'Inventory Window',
-    description: 'Soát tồn kho và phát hiện low-stock items trước khi order queue tăng mạnh.',
-    heroEyebrow: 'Inventory Pulse',
-    heroTitle: 'Keep stock visibility front and center.',
-    heroDescription: 'Bảng điều khiển tập trung để refresh snapshot và chốt các sản phẩm sắp chạm ngưỡng.',
-    searchPlaceholder: 'Search products inside inventory...',
+    eyebrow: 'Inventory Snapshot',
+    description: 'Check available stock and keep the product wall healthy.',
+    heroEyebrow: 'Stock Overview',
+    heroTitle: 'Inventory focus',
+    heroDescription: 'Refresh the latest numbers before the next order wave.',
+    searchPlaceholder: 'Search inventory...',
   },
   '/orders': {
     eyebrow: 'Order Stream',
@@ -185,6 +169,8 @@ function App() {
     return products.filter((product) => product.name?.toLowerCase().includes(normalized));
   }, [products, searchTerm]);
 
+  const featuredProducts = useMemo(() => pickFeaturedProducts(filteredProducts, 4), [filteredProducts]);
+
   const currentRouteContent = routeContent[route] || routeContent[DEFAULT_ROUTE];
   const greetingName = currentUser?.name?.trim()?.split(/\s+/)?.[0] || 'Operator';
   const liveProductCount = products.filter((product) => Number(product.stock || 0) > 0).length;
@@ -199,10 +185,9 @@ function App() {
   const pendingOrderCount = orders.filter((order) => !['CONFIRMED', 'FAILED', 'CANCELLED'].includes(order.status)).length;
 
   const isRouteAllowed = (item) => !item.roles || (role && item.roles.includes(role));
+  const allowedNavItems = navItems.filter(isRouteAllowed);
   const showSearchBar = ['/dashboard', '/products', '/inventory'].includes(route);
-  const showOrderSidebar =
-    ['/dashboard', '/products', '/inventory', '/users', '/admin'].includes(route) &&
-    (role === 'CUSTOMER' || role === 'ADMIN');
+  const showRightRail = true;
 
   const renderNotAllowed = (title, subtitle) => (
     <div className="glass-panel rounded-[32px] border p-6 text-center">
@@ -384,6 +369,59 @@ function App() {
     );
   };
 
+  const renderOrdersView = () => (
+    <section className="fashion-panel rounded-[30px] border p-5 md:p-6">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-sky-600">Order Stream</p>
+          <h2 className="mt-2 text-2xl font-bold text-slate-900">Latest Orders</h2>
+        </div>
+        <button
+          type="button"
+          onClick={fetchOrders}
+          className="rounded-full border border-sky-100 bg-white px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-50"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {orders.length === 0 ? (
+        <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 p-10 text-center text-sm text-slate-500">
+          Chưa có đơn hàng nào.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {orders.map((order) => (
+            <article key={order.id} className="rounded-[24px] border border-slate-100 bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="font-mono text-xs text-slate-400">{order.id?.slice(0, 8)}...</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{order.status}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-400">Total</p>
+                  <p className="text-lg font-bold text-slate-900">${Number(order.totalAmount || 0).toFixed(2)}</p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+                <span>Quantity: {order.quantity}</span>
+                <span>Unit: ${Number(order.unitPrice || 0).toFixed(2)}</span>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => cancelOrder(order.id)}
+                  className="rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  Cancel Order
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+
   const renderSagaView = () => (
     <section className="glass-panel rounded-[32px] border p-5 md:p-6">
       <div className="mb-5 flex items-center justify-between gap-3">
@@ -512,14 +550,13 @@ function App() {
       case '/dashboard':
         return (
           <ProductList
-            products={filteredProducts.slice(0, 4)}
+            products={featuredProducts}
             onRefresh={fetchProducts}
             onBuy={createOrder}
             loading={loading}
             currentUser={currentUser}
             onOpenAddModal={() => setIsProductModalOpen(true)}
-            title="New Trend Selection"
-            subtitle="Bốn sản phẩm nổi bật được kéo lên ngay dưới hero để giữ bố cục dashboard gọn và giống mockup hơn."
+            compact
           />
         );
       case '/products':
@@ -531,24 +568,13 @@ function App() {
             loading={loading}
             currentUser={currentUser}
             onOpenAddModal={() => setIsProductModalOpen(true)}
-            title="Catalog Collection"
-            subtitle="Toàn bộ sản phẩm được trình bày theo layout card lớn hơn, thiên về showcase và thao tác nhanh."
           />
         );
       case '/inventory':
         return renderInventoryView();
       case '/orders':
         if (role === 'CUSTOMER' || role === 'ADMIN') {
-          return (
-            <OrderPanel
-              orders={orders}
-              loading={loading}
-              currentUser={currentUser}
-              onRefresh={fetchOrders}
-              onCancel={cancelOrder}
-              variant="full"
-            />
-          );
+          return renderOrdersView();
         }
         return renderNotAllowed('Orders not available', 'Only customers or admins can access orders.');
       case '/saga':
@@ -565,14 +591,13 @@ function App() {
       default:
         return (
           <ProductList
-            products={filteredProducts}
+            products={featuredProducts}
             onRefresh={fetchProducts}
             onBuy={createOrder}
             loading={loading}
             currentUser={currentUser}
             onOpenAddModal={() => setIsProductModalOpen(true)}
-            title="Catalog Collection"
-            subtitle="Toàn bộ sản phẩm được trình bày theo layout card lớn hơn, thiên về showcase và thao tác nhanh."
+            compact
           />
         );
     }
@@ -622,14 +647,21 @@ function App() {
 
   const fetchProducts = async () => {
     try {
-      const res = await axios.get(`${GATEWAY_URL}/products`);
+      const res = await axios.get(`${GATEWAY_URL}/products`, {
+        params: {
+          page: 0,
+          size: 100,
+          sortBy: 'createdAt',
+          sortDir: 'desc',
+        },
+      });
       if (Array.isArray(res.data)) {
-        setProducts(res.data);
+        setProducts(sortProductsByNewest(res.data));
         return;
       }
 
       if (Array.isArray(res.data?.items)) {
-        setProducts(res.data.items);
+        setProducts(sortProductsByNewest(res.data.items));
         return;
       }
 
@@ -790,40 +822,12 @@ function App() {
     <div
       className={`app-shell min-h-screen ${currentUser ? 'px-3 pb-10 pt-4 md:px-6' : 'px-3 py-5 md:px-6 md:py-8'}`}
     >
-      <div className={`mx-auto w-full ${currentUser ? 'max-w-[1400px]' : 'max-w-[1180px]'}`}>
+      <div className={`mx-auto w-full ${currentUser ? 'max-w-[1490px]' : 'max-w-[1180px]'}`}>
         <Message message={message} />
 
         {!currentUser ? (
           <section className="auth-stage">
             <div className="auth-frame">
-              <div className="hidden px-2 lg:block">
-                <div className="rounded-[42px] bg-slate-950 p-8 text-white shadow-[0_30px_90px_rgba(15,23,42,0.22)]">
-                  <p className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
-                    Store Operations
-                  </p>
-                  <h1 className="mt-5 text-4xl font-bold leading-tight xl:text-5xl">
-                    Redesign the storefront dashboard without losing the working flow.
-                  </h1>
-                  <p className="mt-4 max-w-[520px] text-sm leading-7 text-slate-300">
-                    Layout mới chia rõ rail trái, hero catalog ở giữa và order summary bên phải để thao tác bớt rối mắt.
-                  </p>
-
-                  <div className="mt-8 grid gap-4 md:grid-cols-2">
-                    {[
-                      ['Catalog', `${products.length} products synced`],
-                      ['Orders', `${orders.length} orders tracked`],
-                      ['Media Slot', 'public/dashboard-media/...'],
-                      ['Auth', 'Unified sign-in for all roles'],
-                    ].map(([title, value]) => (
-                      <div key={title} className="rounded-[24px] border border-white/10 bg-white/5 p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/55">{title}</p>
-                        <p className="mt-2 text-sm font-semibold text-white">{value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
               <AuthForm
                 isLoginView={isLoginView}
                 setIsLoginView={setIsLoginView}
@@ -835,41 +839,55 @@ function App() {
             </div>
           </section>
         ) : (
-          <div
-            className={`grid gap-6 ${
-              showOrderSidebar
-                ? 'xl:grid-cols-[300px_minmax(0,1fr)_360px]'
-                : 'xl:grid-cols-[300px_minmax(0,1fr)]'
-            }`}
-          >
-            <UserSidebar
-              currentUser={currentUser}
-              users={users}
-              orders={orders}
-              products={products}
-              navItems={navItems}
-              route={route}
-            />
+          <div className={`fashion-dashboard-grid ${showRightRail ? 'has-order-rail' : 'no-order-rail'}`}>
+            <UserSidebar products={products} navItems={allowedNavItems} route={route} />
 
-            <main className="space-y-6">
-              <header className="dashboard-card rounded-[38px] border px-5 py-5 md:px-6">
-                <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+            <main className="space-y-5">
+              {(route === '/dashboard' || route === '/products') && (
+                <section className="fashion-hero-card rounded-[30px] border p-6 md:p-7">
+                  <MediaSlot
+                    src="/dashboard-media/hero/hero-main.png"
+                    alt="Hero dashboard artwork"
+                    title="Hero artwork"
+                    hint="hero-main.png"
+                    className="fashion-hero-cover h-[300px] rounded-[28px] md:h-[360px]"
+                    imgClassName="h-full w-full object-cover"
+                  />
+                </section>
+              )}
+
+              {renderMainContent()}
+
+              {route === '/inventory' ? (
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="fashion-metric-card rounded-[24px] p-5">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">Products</p>
+                    <p className="mt-4 text-3xl font-bold text-slate-900">{liveProductCount}</p>
+                  </div>
+                  <div className="fashion-metric-card rounded-[24px] p-5">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">Low Stock</p>
+                    <p className="mt-4 text-3xl font-bold text-slate-900">{lowStockCount}</p>
+                  </div>
+                  <div className="fashion-metric-card rounded-[24px] p-5">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">Catalog Value</p>
+                    <p className="mt-4 text-3xl font-bold text-slate-900">${totalCatalogValue.toFixed(0)}</p>
+                  </div>
+                </div>
+              ) : null}
+            </main>
+
+            {showRightRail ? (
+              <aside className="space-y-5">
+                <section className="fashion-panel dashboard-control-rail rounded-[34px] border p-6">
                   <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-sky-600">
-                      {currentRouteContent.eyebrow}
-                    </p>
-                    <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
-                      Hello, {greetingName}
-                    </h1>
-                    <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">
-                      {currentRouteContent.description}
-                    </p>
+                    <h1 className="text-[34px] font-bold leading-none text-slate-900">Hello, {greetingName}</h1>
+                    <p className="mt-3 text-sm leading-7 text-slate-400">{currentRouteContent.description}</p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    {showSearchBar && (
-                      <div className="relative min-w-[260px] flex-1 xl:max-w-[360px]">
-                        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-500" />
+                  <div className="mt-6 space-y-3">
+                    {showSearchBar ? (
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-400" />
                         <input
                           type="text"
                           value={searchTerm}
@@ -878,135 +896,49 @@ function App() {
                           className="dashboard-input w-full rounded-full py-3 pl-11 pr-4 text-sm font-medium text-slate-700 outline-none"
                         />
                       </div>
-                    )}
-                    <div className="chip-soft inline-flex items-center gap-2 rounded-full px-4 py-3 text-xs font-semibold text-slate-600">
-                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow shadow-emerald-200" />
-                      Live sync
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-sky-600"
+                      aria-label="Notifications"
+                    >
+                      <BellDot className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-6 rounded-[24px] border border-slate-100 bg-white px-4 py-4 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 to-blue-600 text-xl font-bold text-white">
+                        {(currentUser?.name || 'U').trim().charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-lg font-semibold text-slate-900">{currentUser?.name}</p>
+                        <p className="truncate text-sm text-slate-500">{currentUser?.email}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 space-y-3">
+                    <div className="inline-flex rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-600">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                        Live sync
+                      </span>
                     </div>
                     <button
                       type="button"
-                      className="chip-soft inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-600 transition hover:text-sky-700"
-                      aria-label="Notifications"
-                    >
-                      <BellDot className="h-5 w-5" />
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => handleLogout()}
-                      className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-slate-800"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-slate-800"
                     >
                       <LogOut className="h-4 w-4" />
                       Logout
                     </button>
                   </div>
-                </div>
-              </header>
-
-              <section className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_240px]">
-                <div className="dashboard-hero rounded-[40px] p-6 text-white md:p-8">
-                  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-end">
-                    <div className="relative z-[1]">
-                      <p className="inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.28em] text-white/85">
-                        <Sparkles className="h-4 w-4" />
-                        {currentRouteContent.heroEyebrow}
-                      </p>
-                      <h2 className="mt-5 max-w-xl text-3xl font-bold leading-tight md:text-4xl">
-                        {currentRouteContent.heroTitle}
-                      </h2>
-                      <p className="mt-4 max-w-xl text-sm leading-7 text-white/78">
-                        {currentRouteContent.heroDescription}
-                      </p>
-
-                      <div className="mt-6 flex flex-wrap gap-3">
-                        <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white">
-                          {liveProductCount} live products
-                        </span>
-                        <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white">
-                          {pendingOrderCount} orders in progress
-                        </span>
-                        <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white">
-                          {lowStockCount} low-stock alerts
-                        </span>
-                      </div>
-
-                      <div className="mt-8 flex flex-wrap items-center gap-3">
-                        {(currentUser.role === 'SELLER' || currentUser.role === 'ADMIN') && (
-                          <button
-                            type="button"
-                            onClick={() => setIsProductModalOpen(true)}
-                            className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-lg shadow-cyan-900/10 transition hover:-translate-y-0.5"
-                          >
-                            Create Product
-                            <ArrowRight className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        <a
-                          href="#/products"
-                          className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
-                        >
-                          Open Catalog
-                          <ArrowRight className="h-4 w-4" />
-                        </a>
-                      </div>
-                    </div>
-
-                    <MediaSlot
-                      src="/dashboard-media/hero/hero-main.png"
-                      alt="Hero dashboard artwork"
-                      title="Hero artwork slot"
-                      hint="Add public/dashboard-media/hero/hero-main.png"
-                      className="h-[280px] rounded-[32px] border border-white/15 bg-white/10 p-3"
-                      imgClassName="h-full w-full rounded-[24px] object-cover"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-3 2xl:grid-cols-1">
-                  <div className="dashboard-metric-card rounded-[30px] p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Catalog Value</p>
-                      <CircleDollarSign className="h-5 w-5 text-sky-600" />
-                    </div>
-                    <p className="mt-4 text-3xl font-bold text-slate-900">${totalCatalogValue.toFixed(0)}</p>
-                    <p className="mt-2 text-sm text-slate-500">Approx. live inventory value</p>
-                  </div>
-
-                  <div className="dashboard-metric-card rounded-[30px] p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Orders</p>
-                      <ListOrdered className="h-5 w-5 text-sky-600" />
-                    </div>
-                    <p className="mt-4 text-3xl font-bold text-slate-900">{orders.length}</p>
-                    <p className="mt-2 text-sm text-slate-500">{pendingOrderCount} orders vẫn đang mở</p>
-                  </div>
-
-                  <div className="dashboard-metric-card rounded-[30px] p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Inventory</p>
-                      <Boxes className="h-5 w-5 text-sky-600" />
-                    </div>
-                    <p className="mt-4 text-3xl font-bold text-slate-900">{liveProductCount}</p>
-                    <p className="mt-2 text-sm text-slate-500">Products còn tồn kho để bán</p>
-                  </div>
-                </div>
-              </section>
-
-              {renderMainContent()}
-            </main>
-
-            {showOrderSidebar ? (
-              <aside className="xl:sticky xl:top-4 xl:h-fit">
-                <OrderPanel
-                  orders={orders}
-                  loading={loading}
-                  currentUser={currentUser}
-                  onRefresh={fetchOrders}
-                  onCancel={cancelOrder}
-                  variant="sidebar"
-                />
+                </section>
               </aside>
             ) : null}
+
           </div>
         )}
 

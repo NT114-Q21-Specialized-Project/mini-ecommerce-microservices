@@ -32,7 +32,7 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-500">
           {isLoginView
-            ? 'Đăng nhập để bước vào dashboard mới: catalog ở giữa, navigation bên trái, order pulse bên phải.'
+            ? 'Đăng nhập để bước vào dashboard mới: navigation bên trái, profile ở góc phải và catalog ở giữa.'
             : 'Tạo tài khoản để tham gia flow customer hoặc seller ngay trong cùng workspace.'}
         </p>
 
