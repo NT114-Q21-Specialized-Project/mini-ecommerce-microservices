@@ -4,17 +4,23 @@ const normalizeText = (value) =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
+const MEDIA_VERSION = '20260415-2';
+
 export const mediaCatalog = [
   { file: 'white-cap.png', keywords: ['hat', 'cap', 'horee'], label: '10%' },
-  { file: 'denim-shirt.png', keywords: ['denim', 'emporia', 'armoni', 'button'], label: '50%' },
-  { file: 'grey-tee.png', keywords: ['v-neck', 'v neck', 'tshirt', 't-shirt', 'tee'], label: '40%' },
-  { file: 'white-sneaker.png', keywords: ['shoe', 'sneaker', 'adisia', 'speed'], label: '50%' },
-  { file: 'sora-denim-shirt.png', keywords: ['sora', 'short sleeve denim', 'denim shirt'], label: '35%' },
+  {
+    file: 'sora-denim-shirt.png',
+    keywords: ['sora denim shirt', 'sora denim', 'sora', 'short sleeve denim'],
+    label: '35%',
+  },
   { file: 'midnight-polo.png', keywords: ['midnight', 'polo'], label: '20%' },
   { file: 'cloud-hoodie.png', keywords: ['cloud', 'hoodie'], label: '25%' },
   { file: 'navy-tailored-pants.png', keywords: ['navy tailored', 'tailored pants', 'trousers'], label: '30%' },
   { file: 'charcoal-joggers.png', keywords: ['charcoal', 'jogger', 'joggers'], label: '15%' },
-  { file: 'weekend-denim-shorts.png', keywords: ['weekend', 'denim shorts', 'shorts'], label: '20%' },
+  { file: 'weekend-denim-shorts.png', keywords: ['weekend denim shorts', 'weekend', 'denim shorts'], label: '20%' },
+  { file: 'denim-shirt.png', keywords: ['emporia armoni', 'emporia', 'armoni', 'button'], label: '50%' },
+  { file: 'grey-tee.png', keywords: ['v-neck', 'v neck', 'tshirt', 't-shirt', 'tee'], label: '40%' },
+  { file: 'white-sneaker.png', keywords: ['shoe', 'sneaker', 'adisia', 'speed'], label: '50%' },
 ];
 
 export const dashboardShowcaseProducts = [
@@ -47,7 +53,7 @@ export const resolveProductMedia = (product) => {
 
   if (matchedMedia) {
     return {
-      src: `/dashboard-media/products/${matchedMedia.file}`,
+      src: `/dashboard-media/products/${matchedMedia.file}?v=${MEDIA_VERSION}`,
       fileLabel: matchedMedia.file,
       badge: matchedMedia.label,
     };
@@ -59,7 +65,7 @@ export const resolveProductMedia = (product) => {
 
   const slug = toMediaSlug(product?.name);
   return {
-    src: `/dashboard-media/products/${slug}.png`,
+    src: `/dashboard-media/products/${slug}.png?v=${MEDIA_VERSION}`,
     fileLabel: `${slug}.png`,
     badge: 'New',
   };
