@@ -32,8 +32,8 @@ const AuthForm = ({ isLoginView, setIsLoginView, formData, setFormData, handleAu
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-500">
           {isLoginView
-            ? 'Đăng nhập để bước vào dashboard mới: navigation bên trái, profile ở góc phải và catalog ở giữa.'
-            : 'Tạo tài khoản để tham gia flow customer hoặc seller ngay trong cùng workspace.'}
+            ? 'Đăng nhập để tiếp tục quản lý sản phẩm, đơn hàng và tài khoản trong một dashboard gọn gàng.'
+            : 'Tạo tài khoản để tham gia flow customer hoặc seller.'}
         </p>
 
         <form onSubmit={handleAuth} className="mt-7 space-y-3.5">

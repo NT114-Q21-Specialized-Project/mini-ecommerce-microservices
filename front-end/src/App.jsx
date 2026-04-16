@@ -843,7 +843,7 @@ function App() {
             <UserSidebar products={products} navItems={allowedNavItems} route={route} />
 
             <main className="space-y-5">
-              {(route === '/dashboard' || route === '/products') && (
+              {route === '/dashboard' && (
                 <section className="fashion-hero-card rounded-[30px] border p-6 md:p-7">
                   <MediaSlot
                     src="/dashboard-media/hero/hero-main.png"
