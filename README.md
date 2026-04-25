@@ -30,6 +30,8 @@ Default local ports:
 
 ## 2. Architecture
 
+![Architecture Diagram](picture/diagram.gif)
+
 ```mermaid
 flowchart LR
     Client[Client\nBrowser/Curl] -->|HTTP /api/v1/*| Gateway[API Gateway :9000]
